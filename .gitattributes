@@ -1,0 +1,2 @@
+src/assets/google_sheets_crm.png filter=lfs diff=lfs merge=lfs -text
+src/assets/telegram_lead_alert.png filter=lfs diff=lfs merge=lfs -text

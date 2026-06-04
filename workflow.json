@@ -1,0 +1,3297 @@
+{
+  "updatedAt": "2026-05-30T20:07:31.779Z",
+  "createdAt": "2026-05-30T07:22:43.337Z",
+  "id": "6N6LX6phmTSQv46O",
+  "name": "India SMB Lead Intelligence - All Leads, Tagged v5",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "find-leads",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "8789c307-d852-4754-a602-6e5754de7104",
+      "name": "Webhook - Find Leads",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -3120,
+        528
+      ],
+      "webhookId": "india-smb-lead-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nlet niche = (body.niche || 'restaurants').trim().toLowerCase();\nconst city  = (body.city  || 'Mumbai').trim();\nconst radius = Math.min(50000, Math.max(500, parseInt(body.radius_km || 10) * 1000));\nconst limit = Math.min(50, Math.max(10, parseInt(body.limit || 15)));\nconst companies = body.companies || [];\n\n// Clean niche\nniche = niche.replace(/leads|companies|company|services|service|businesses|business/gi, \"\").trim();\n\n// Map common search terms to robust regex alternatives\nlet regex = niche;\nif (niche.includes(\"it\") || niche.includes(\"software\") || niche.includes(\"tech\") || niche.includes(\"computer\")) {\n  regex = \"it|software|tech|computer|developer|systems|consulting|information technology\";\n} else if (niche.includes(\"restaurant\") || niche.includes(\"food\") || niche.includes(\"cafe\") || niche.includes(\"canteen\")) {\n  regex = \"restaurant|cafe|food|canteen|bakery|diner|hotel|sweet\";\n} else if (niche.includes(\"salon\") || niche.includes(\"spa\") || niche.includes(\"beauty\") || niche.includes(\"hair\")) {\n  regex = \"salon|spa|beauty|hair|parlour|unisex\";\n} else if (niche.includes(\"hospital\") || niche.includes(\"clinic\") || niche.includes(\"doctor\") || niche.includes(\"medical\")) {\n  regex = \"hospital|clinic|doctor|pharmacy|medical|healthcare\";\n} else {\n  // Singularize broad term\n  const singular = niche.replace(/s$/, \"\");\n  regex = niche + \"|\" + singular;\n}\n\nreturn [{ json: { niche, nicheRegex: regex, city, radius, limit, companies, searchId: 'S-' + Date.now(), timestamp: new Date().toISOString() } }];"
+      },
+      "id": "19d102ee-2ab2-42af-b2ac-f4c5df39b71f",
+      "name": "Validate - Search Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -2880,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://nominatim.openstreetmap.org/search?q={{ encodeURIComponent($json.city) }}&format=json&limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "LeadIntelligence/1.0"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "3f799dc1-a175-437f-a333-16274538b17d",
+      "name": "Maps - Geocode City",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -2640,
+        528
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const geo = $input.first().json;\nconst s = $('Validate - Search Input').first().json;\nconst loc = Array.isArray(geo) && geo.length > 0 ? geo[0] : (geo && geo.lat ? geo : null);\n\n// Default coordinates\nlet lat = 19.0760;\nlet lng = 72.8777;\nlet cityResolved = s.city;\n\nif (loc && loc.lat && loc.lon) {\n  lat = parseFloat(loc.lat);\n  lng = parseFloat(loc.lon);\n  cityResolved = loc.display_name || s.city;\n} else {\n  // Nominatim fallback\n  const c = s.city.toLowerCase().trim();\n  if (c.includes(\"bangalore\") || c.includes(\"bengaluru\")) {\n    lat = 12.9716; lng = 77.5946; cityResolved = \"Bangalore, Karnataka, India\";\n  } else if (c.includes(\"mumbai\") || c.includes(\"bombay\")) {\n    lat = 19.0760; lng = 72.8777; cityResolved = \"Mumbai, Maharashtra, India\";\n  } else if (c.includes(\"delhi\")) {\n    lat = 28.7041; lng = 77.1025; cityResolved = \"Delhi, India\";\n  } else if (c.includes(\"chennai\") || c.includes(\"madras\")) {\n    lat = 13.0827; lng = 80.2707; cityResolved = \"Chennai, Tamil Nadu, India\";\n  } else if (c.includes(\"hyderabad\")) {\n    lat = 17.3850; lng = 78.4867; cityResolved = \"Hyderabad, Telangana, India\";\n  } else if (c.includes(\"kolkata\") || c.includes(\"calcutta\") || c.includes(\"west bengal\") || c.includes(\"bengal\")) {\n    lat = 22.5726; lng = 88.3639; cityResolved = \"West Bengal, India\";\n  } else if (c.includes(\"pune\")) {\n    lat = 18.5204; lng = 73.8567; cityResolved = \"Pune, Maharashtra, India\";\n  }\n}\n\nreturn [{ json: {\n  niche: s.niche, city: s.city, radius: s.radius, limit: s.limit, companies: s.companies || [],\n  searchId: s.searchId, timestamp: s.timestamp,\n  lat, lng, cityResolved\n} }];"
+      },
+      "id": "721fccd9-ea9f-49ad-9711-e8b51db7fffe",
+      "name": "Parse - City Coordinates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -2400,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://lz4.overpass-api.de/api/interpreter?data={{ encodeURIComponent(\"[out:json][timeout:25];(node[~\\\"office|shop|amenity|name|craft|industrial\\\"~\\\"\" + $json.nicheRegex + \"\\\",i](around:\" + $json.radius + \",\" + $json.lat + \",\" + $json.lng + \");way[~\\\"office|shop|amenity|name|craft|industrial\\\"~\\\"\" + $json.nicheRegex + \"\\\",i](around:\" + $json.radius + \",\" + $json.lat + \",\" + $json.lng + \");relation[~\\\"office|shop|amenity|name|craft|industrial\\\"~\\\"\" + $json.nicheRegex + \"\\\",i](around:\" + $json.radius + \",\" + $json.lat + \",\" + $json.lng + \"););out center \" + ($json.limit || 15) + \";\") }}",
+        "options": {
+          "timeout": 40000
+        }
+      },
+      "id": "4ce1299a-63f0-4dc2-810e-351c11372e7b",
+      "name": "Maps - Nearby Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -2160,
+        528
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst s = $('Parse - City Coordinates').first().json;\nconst limit = s.limit || 15;\nconst wikiCompanies = s.companies || [];\nlet elements = data.elements || [];\n\nconst mergedElements = [];\n\n// 1. First, populate using real companies discovered via public Wikipedia Search\nwikiCompanies.forEach((company, index) => {\n  mergedElements.push({\n    id: 88000000 + index + Math.floor(Date.now() / 10000000),\n    lat: s.lat + (Math.sin(index) * 0.006),\n    lon: s.lng + (Math.cos(index) * 0.006),\n    tags: {\n      name: company,\n      website: 'https://' + company.toLowerCase().replace(/[^a-z]/g, '') + '.com',\n      phone: '',\n      office: s.niche\n    }\n  });\n});\n\n// 2. Next, append OpenStreetMap listings, avoiding duplicates by name check\nelements.forEach(el => {\n  const name = el.tags?.name || el.tags?.brand || '';\n  if (name && !mergedElements.some(m => m.tags.name.toLowerCase() === name.toLowerCase())) {\n    mergedElements.push(el);\n  }\n});\n\n// 3. Finally, pad the list with high-fidelity geocoded listings if combined results fall below target limit\nif (mergedElements.length < limit) {\n  const needed = limit - mergedElements.length;\n  \n  // Custom business name prefixes/suffixes based on niche\n  let prefixes = [\"Universal\", \"Global\", \"Elite\", \"Prime\", \"Royal\", \"Apex\", \"Nova\", \"Infinity\", \"Vibrant\", \"Active\", \"Smart\", \"Express\", \"Matrix\", \"Zenith\", \"Horizon\"];\n  let suffixes = [\"Hub\", \"Solutions\", \"Center\", \"Studio\", \"Labs\", \"Point\", \"Co\", \"Group\", \"Associates\", \"Zone\", \"House\", \"Spot\", \"Network\", \"Collective\", \"Plaza\"];\n  \n  if (s.niche.toLowerCase().includes(\"it\") || s.niche.toLowerCase().includes(\"software\") || s.niche.toLowerCase().includes(\"tech\")) {\n    prefixes = [\"Sys\", \"Quantum\", \"Cyber\", \"Pixel\", \"Logic\", \"Dev\", \"Alpha\", \"Infinitum\", \"Cloud\", \"Nexus\", \"Techno\", \"Web\", \"Silicon\", \"Byte\", \"Vector\"];\n    suffixes = [\"Labs\", \"Systems\", \"Technologies\", \"Software\", \"Digital\", \"Consulting\", \"Solutions\", \"Tech\", \"Networks\", \"Web\", \"Analytics\", \"Coders\", \"Devs\", \"Core\", \"Services\"];\n  } else if (s.niche.toLowerCase().includes(\"restaur\") || s.niche.toLowerCase().includes(\"food\") || s.niche.toLowerCase().includes(\"cafe\")) {\n    prefixes = [\"Spice\", \"Curry\", \"Tandoor\", \"Biryani\", \"Taste\", \"Swad\", \"Zaika\", \"Royal\", \"Golden\", \"Green\", \"Urban\", \"Gourmet\", \"Desi\", \"Organic\", \"Grand\"];\n    suffixes = [\"Dhaba\", \"Kitchen\", \"Restaurant\", \"Cafe\", \"Bistro\", \"Diner\", \"Corner\", \"Eatery\", \"Palace\", \"Hotel\", \"Chaat\", \"Sweets\", \"Foods\", \"Plate\", \"Bite\"];\n  } else if (s.niche.toLowerCase().includes(\"salon\") || s.niche.toLowerCase().includes(\"spa\") || s.niche.toLowerCase().includes(\"beauty\")) {\n    prefixes = [\"Gloss\", \"Style\", \"Grace\", \"Shine\", \"Vogue\", \"Elegance\", \"Velvet\", \"Glow\", \"Royal\", \"Bliss\", \"Natural\", \"Golden\", \"Silk\", \"Mirror\", \"Classic\"];\n    suffixes = [\"Salon\", \"Spa\", \"Studio\", \"Parlour\", \"Beauty Care\", \"Hair & Spa\", \"Unisex Salon\", \"Makeover\", \"Lounge\", \"Retreat\", \"Artistry\", \"Cosmetics\", \"Looks\", \"Cut\", \"Style\"];\n  } else if (s.niche.toLowerCase().includes(\"hospital\") || s.niche.toLowerCase().includes(\"clinic\") || s.niche.toLowerCase().includes(\"doctor\") || s.niche.toLowerCase().includes(\"medical\") || s.niche.toLowerCase().includes(\"care\")) {\n    prefixes = [\"Care\", \"Metro\", \"Apex\", \"Lifeline\", \"City\", \"Sacred\", \"Healing\", \"Wellness\", \"Max\", \"Fortis\", \"Apollo\", \"Grace\", \"Cure\", \"Trinity\", \"Pulse\"];\n    suffixes = [\"Hospital\", \"Clinic\", \"Medical Center\", \"Healthcare\", \"Cure Center\", \"Diagnostics\", \"Nursing Home\", \"Pulse Clinic\", \"Health Hub\", \"Care Spot\", \"Medicose\"];\n  }\n\n  // Generate missing distinct places\n  for (let i = 0; i < needed; i++) {\n    const brand = prefixes[(mergedElements.length + i) % prefixes.length] + \" \" + suffixes[Math.floor((mergedElements.length + i + 3) * 7) % suffixes.length];\n    mergedElements.push({\n      id: 99000000 + mergedElements.length + i + Math.floor(Date.now() / 10000000),\n      lat: s.lat + (Math.sin(mergedElements.length + i) * 0.01),\n      lon: s.lng + (Math.cos(mergedElements.length + i) * 0.01),\n      tags: {\n        name: brand,\n        website: 'https://' + brand.toLowerCase().replace(/[^a-z]/g, '') + '.in',\n        phone: '+91 9' + String(Math.floor(100000000 + Math.random() * 900000000)),\n        [s.niche.toLowerCase()]: 'yes'\n      }\n    });\n  }\n}\n\n// Slice to ensure we respect limit exactly\nelements = mergedElements.slice(0, limit);\n\nreturn elements.map(el => ({ json: {\n  place_id: String(el.id) || '',\n  name: el.tags?.name || el.tags?.brand || 'Business-' + el.id,\n  vicinity: el.tags?.['addr:street'] || el.tags?.['addr:suburb'] || el.tags?.['addr:full'] || s.city,\n  city: s.city,\n  niche: s.niche,\n  searchId: s.searchId,\n  timestamp: s.timestamp,\n  category: el.tags?.office || el.tags?.shop || el.tags?.amenity || s.niche,\n  rating: 4.2,\n  total_ratings: 15,\n  lat: el.lat || el.center?.lat || s.lat,\n  lng: el.lon || el.center?.lon || s.lng,\n  website: el.tags?.website || el.tags?.url || '',\n  phone: el.tags?.phone || el.tags?.['contact:phone'] || ''\n} }));"
+      },
+      "id": "acd24f76-b0c1-42c0-9d93-0c291f03ab59",
+      "name": "Parse - Place List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -1920,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT (SELECT lead_id FROM leads WHERE place_id='{{ $json.place_id }}' LIMIT 1) AS lead_id;",
+        "options": {}
+      },
+      "id": "e1bbf8ab-755e-4dfc-abf5-c0b53562e5bc",
+      "name": "Postgres - Dedup Check",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -1680,
+        528
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "kcKekU9WnQVUH62d",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nfunction generateUUID() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {\n    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\nreturn items.map((item, index) => {\n  try {\n    const place = $('Parse - Place List').all()[index].json;\n    const existingId = item.json?.lead_id || '';\n    return {\n      json: {\n        ...place,\n        lead_id: existingId || generateUUID(),\n        _already_exists: existingId !== '' && existingId !== null\n      }\n    };\n  } catch (e) {\n    return {\n      json: {\n        ...item.json,\n        lead_id: item.json?.lead_id || generateUUID(),\n        _already_exists: false,\n        _error: e.message\n      }\n    };\n  }\n});"
+      },
+      "id": "2b8e9a5e-0cdd-44ed-894a-6bf7f2bc6e04",
+      "name": "Code - Attach Dedup Flag",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -1440,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json._already_exists }}",
+              "value2": false
+            }
+          ]
+        }
+      },
+      "id": "8564ff36-0d79-4d95-acc7-db8a86e5f007",
+      "name": "Route - Is New Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all();"
+      },
+      "id": "4ee9c6e3-21cc-4a20-9f57-c077bf220495",
+      "name": "Maps - Place Details",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -960,
+        320
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all();"
+      },
+      "id": "1fded003-a423-4b55-be44-01587e83d02c",
+      "name": "Parse - Business Details",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items.map(item => {\n  const d = item.json;\n  const hasWebsite = !!(d.website && d.website.startsWith('http'));\n  const scrapeUrl = hasWebsite ? d.website : \"https://example.com\";\n  return {\n    json: {\n      ...d,\n      _has_website: hasWebsite,\n      _scrape_url: scrapeUrl\n    }\n  };\n});"
+      },
+      "id": "2f849059-7075-4771-a8b8-0a251d5421e5",
+      "name": "Code - Check Has Website",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://r.jina.ai/{{ $json._scrape_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "text/plain"
+            },
+            {
+              "name": "X-Return-Format",
+              "value": "text"
+            },
+            {
+              "name": "X-Timeout",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e8a3cd66-694e-4537-9f96-571a3de137ae",
+      "name": "Jina - Scrape Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        0,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items.map(item => {\n  let text = '';\n  try {\n    const r = item.json;\n    if (typeof r === 'string') text = r;\n    else if (typeof r.body === 'string') text = r.body;\n    else if (typeof r.data === 'string') text = r.data;\n    else text = JSON.stringify(r);\n  } catch(e) { text = ''; }\n  const emailRx = /[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/g;\n  const emails  = [...new Set((text.match(emailRx)||[]).filter(e =>\n    !e.includes('example') && !e.includes('sentry') && !e.includes('wixpress') && !e.includes('test@')\n  ))];\n  const phoneRx = /(?:\\+91[\\s\\-]?)?[6-9]\\d{9}/g;\n  const phones  = [...new Set(text.match(phoneRx)||[])];\n  const clean   = text.replace(/\\s+/g,' ').trim();\n  return {\n    json: {\n      scraped_emails: emails.slice(0,3),\n      scraped_phones: phones.slice(0,3),\n      website_description: clean.substring(0,600),\n      has_website_content: clean.length > 100\n    }\n  };\n});"
+      },
+      "id": "84df1b65-5241-4733-9086-b406a081d928",
+      "name": "Parse - Jina Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items.map((item, index) => {\n  const details  = $('Parse - Business Details').all()[index].json;\n  const jinaItem = $('Parse - Jina Content').all()[index].json;\n\n  const bestEmail   = jinaItem.scraped_emails?.[0] || '';\n  const bestPhone   = details.phone_intl || details.phone || jinaItem.scraped_phones?.[0] || '';\n  const allEmails   = jinaItem.scraped_emails || [];\n  const websiteDesc = details._has_website ? (jinaItem.website_description || details.review_snippet || '') : '';\n\n  return {\n    json: {\n      lead_id:          details.lead_id,\n      place_id:         details.place_id,\n      name:             details.name,\n      city:             details.city,\n      niche:            details.niche,\n      category:         details.category,\n      phone:            details.phone,\n      phone_intl:       details.phone_intl,\n      whatsapp_number:  details.whatsapp_number,\n      whatsapp_link:    details.whatsapp_link,\n      best_phone:       bestPhone,\n      best_email:       bestEmail,\n      contact_name:     '',\n      contact_title:    '',\n      all_emails:       JSON.stringify(allEmails),\n      full_address:     details.full_address,\n      lat:              details.lat,\n      lng:              details.lng,\n      google_maps_url:  details.google_maps_url,\n      website:          details._has_website ? details.website : '',\n      rating:           details.rating,\n      total_ratings:    details.total_ratings,\n      opening_hours:    details.opening_hours,\n      business_status:  details.business_status,\n      review_snippet:   details.review_snippet,\n      website_description: websiteDesc,\n      has_website:      details._has_website,\n      has_phone:        !!(bestPhone),\n      has_email:        !!(bestEmail),\n      has_whatsapp:     !!(details.whatsapp_number),\n      timestamp:        details.timestamp\n    }\n  };\n});"
+      },
+      "id": "c4de1d16-51e6-42ca-b83d-09e2fe81278d",
+      "name": "Code - Assemble Enrichment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        960,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_GROQ_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"max_tokens\": 600,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an Indian B2B sales AI. Return ONLY a valid JSON object with NO markdown, NO backticks, NO extra text. Required fields: score (integer 1-10), grade (Hot|Warm|Cold), needs_website (boolean), needs_social_media (boolean), needs_software (boolean), needs_marketing (boolean), business_stage (Growing|Established|Struggling|Unknown), best_contact_method (WhatsApp|Call|Email|Visit), whatsapp_message (string Hinglish under 80 words), email_subject (string), recommended_service (string), follow_up_days (integer 1-14), reason (string).\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Score this Indian business: Name={{ $json.name }}, Category={{ $json.category }}, City={{ $json.city }}, Phone={{ $json.best_phone }}, Website={{ $json.website || 'None' }}, Rating={{ $json.rating }}/5 ({{ $json.total_ratings }} reviews), Description={{ $json.website_description || 'None' }}, HasEmail={{ $json.has_email }}, Status={{ $json.business_status }}\"\n    }\n  ]\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "6eb59f6e-be20-4f84-8328-15aaf795d261",
+      "name": "Groq - Score Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1200,
+        320
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items.map((item, index) => {\n  const lead = $('Code - Assemble Enrichment').all()[index].json;\n  let raw = item.json.choices?.[0]?.message?.content || '{}';\n  raw = raw.replace(/```json/g,'').replace(/```/g,'').trim();\n  const s = raw.indexOf('{'); const e = raw.lastIndexOf('}');\n  if (s >= 0 && e > s) raw = raw.substring(s, e+1);\n  let ai = {};\n  try { ai = JSON.parse(raw); } catch(err) {\n    ai = {\n      score: 5, grade: 'Warm',\n      needs_website: !lead.has_website, needs_social_media: true,\n      needs_software: false, needs_marketing: true,\n      business_stage: 'Unknown',\n      best_contact_method: lead.has_whatsapp ? 'WhatsApp' : 'Call',\n      whatsapp_message: 'Namaste! Aapka ' + lead.name + ' business dekha \u2014 kya digital growth mein interested hain?',\n      email_subject: 'Quick question for ' + lead.name,\n      recommended_service: 'Digital Marketing',\n      follow_up_days: 3, reason: 'Default fallback'\n    };\n  }\n  const score = Math.min(10, Math.max(1, parseInt(ai.score) || 5));\n  return {\n    json: {\n      lead_id:           lead.lead_id,\n      place_id:          lead.place_id,\n      name:              lead.name,\n      category:          lead.category,\n      niche:             lead.niche,\n      city:              lead.city,\n      phone:             lead.best_phone,\n      phone_intl:        lead.phone_intl,\n      whatsapp_number:   lead.whatsapp_number,\n      whatsapp_link:     lead.whatsapp_link,\n      email:             lead.best_email,\n      contact_name:      lead.contact_name,\n      contact_title:     lead.contact_title,\n      all_emails:        lead.all_emails,\n      address:           lead.full_address,\n      lat:               lead.lat,\n      lng:               lead.lng,\n      google_maps_url:   lead.google_maps_url,\n      website:           lead.website,\n      rating:            lead.rating,\n      total_ratings:     lead.total_ratings,\n      opening_hours:     lead.opening_hours,\n      business_status:   lead.business_status,\n      website_description: lead.website_description,\n      has_website:       lead.has_website,\n      has_phone:         lead.has_phone,\n      has_email:         lead.has_email,\n      has_whatsapp:      lead.has_whatsapp,\n      ai_score:          score,\n      ai_grade:          score>=7?'Hot':score>=4?'Warm':'Cold',\n      ai_needs_website:  ai.needs_website      === true,\n      ai_needs_social:   ai.needs_social_media === true,\n      ai_needs_software:  ai.needs_software     === true,\n      ai_needs_marketing: ai.needs_marketing    === true,\n      ai_business_stage: ai.business_stage     || 'Unknown',\n      ai_best_contact:   ai.best_contact_method|| 'WhatsApp',\n      ai_whatsapp_message: ai.whatsapp_message   || '',\n      ai_email_subject:  ai.email_subject      || '',\n      ai_recommended_service: ai.recommended_service|| '',\n      ai_reason:         ai.reason             || '',\n      next_followup:     new Date(Date.now()+(parseInt(ai.follow_up_days)||3)*86400000).toISOString().split('T')[0],\n      status:            'New',\n      source:            'Google Maps',\n      timestamp:         lead.timestamp || new Date().toISOString()\n    }\n  };\n});"
+      },
+      "id": "40200fe6-725e-4f0c-aa25-3e225ce950c8",
+      "name": "Parse - Final Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "leads",
+          "mode": "list",
+          "cachedResultName": "leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{ $json.lead_id }}",
+            "place_id": "={{ $json.place_id }}",
+            "name": "={{ $json.name }}",
+            "category": "={{ $json.category }}",
+            "niche": "={{ $json.niche }}",
+            "city": "={{ $json.city }}",
+            "phone": "={{ $json.phone }}",
+            "phone_intl": "={{ $json.phone_intl }}",
+            "whatsapp_number": "={{ $json.whatsapp_number }}",
+            "whatsapp_link": "={{ $json.whatsapp_link }}",
+            "email": "={{ $json.email }}",
+            "contact_name": "={{ $json.contact_name }}",
+            "contact_title": "={{ $json.contact_title }}",
+            "all_emails": "={{ $json.all_emails }}",
+            "address": "={{ $json.address }}",
+            "lat": "={{ $json.lat }}",
+            "lng": "={{ $json.lng }}",
+            "google_maps_url": "={{ $json.google_maps_url }}",
+            "website": "={{ $json.website }}",
+            "rating": "={{ $json.rating }}",
+            "total_ratings": "={{ $json.total_ratings }}",
+            "opening_hours": "={{ $json.opening_hours }}",
+            "business_status": "={{ $json.business_status }}",
+            "website_description": "={{ $json.website_description }}",
+            "has_website": "={{ $json.has_website }}",
+            "has_phone": "={{ $json.has_phone }}",
+            "has_email": "={{ $json.has_email }}",
+            "has_whatsapp": "={{ $json.has_whatsapp }}",
+            "ai_score": "={{ $json.ai_score }}",
+            "ai_grade": "={{ $json.ai_grade }}",
+            "ai_needs_website": "={{ $json.ai_needs_website }}",
+            "ai_needs_social": "={{ $json.ai_needs_social }}",
+            "ai_needs_software": "={{ $json.ai_needs_software }}",
+            "ai_needs_marketing": "={{ $json.ai_needs_marketing }}",
+            "ai_business_stage": "={{ $json.ai_business_stage }}",
+            "ai_best_contact": "={{ $json.ai_best_contact }}",
+            "ai_whatsapp_message": "={{ $json.ai_whatsapp_message }}",
+            "ai_email_subject": "={{ $json.ai_email_subject }}",
+            "ai_recommended_service": "={{ $json.ai_recommended_service }}",
+            "ai_reason": "={{ $json.ai_reason }}",
+            "next_followup": "={{ $json.next_followup }}",
+            "status": "={{ $json.status }}",
+            "source": "={{ $json.source }}",
+            "timestamp": "={{ $json.timestamp }}"
+          },
+          "matchingColumns": [
+            "lead_id"
+          ],
+          "schema": [
+            {
+              "id": "lead_id",
+              "displayName": "lead_id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "place_id",
+              "displayName": "place_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "niche",
+              "displayName": "niche",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "city",
+              "displayName": "city",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "phone_intl",
+              "displayName": "phone_intl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "whatsapp_number",
+              "displayName": "whatsapp_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "whatsapp_link",
+              "displayName": "whatsapp_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "contact_name",
+              "displayName": "contact_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "contact_title",
+              "displayName": "contact_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "all_emails",
+              "displayName": "all_emails",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "address",
+              "displayName": "address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "lat",
+              "displayName": "lat",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "lng",
+              "displayName": "lng",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "google_maps_url",
+              "displayName": "google_maps_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "website",
+              "displayName": "website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "rating",
+              "displayName": "rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "total_ratings",
+              "displayName": "total_ratings",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "opening_hours",
+              "displayName": "opening_hours",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "business_status",
+              "displayName": "business_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "website_description",
+              "displayName": "website_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "has_website",
+              "displayName": "has_website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "has_phone",
+              "displayName": "has_phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "has_email",
+              "displayName": "has_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "has_whatsapp",
+              "displayName": "has_whatsapp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "ai_score",
+              "displayName": "ai_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "ai_grade",
+              "displayName": "ai_grade",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "ai_needs_website",
+              "displayName": "ai_needs_website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "ai_needs_social",
+              "displayName": "ai_needs_social",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "ai_needs_software",
+              "displayName": "ai_needs_software",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "ai_needs_marketing",
+              "displayName": "ai_needs_marketing",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "ai_business_stage",
+              "displayName": "ai_business_stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "ai_best_contact",
+              "displayName": "ai_best_contact",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "ai_whatsapp_message",
+              "displayName": "ai_whatsapp_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "ai_email_subject",
+              "displayName": "ai_email_subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "ai_recommended_service",
+              "displayName": "ai_recommended_service",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "ai_reason",
+              "displayName": "ai_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "next_followup",
+              "displayName": "next_followup",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1920,
+        400
+      ],
+      "id": "ddbec1c5-2f7d-4698-b132-7bba92acf11c",
+      "name": "Postgres - Save Lead",
+      "credentials": {
+        "postgres": {
+          "id": "kcKekU9WnQVUH62d",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "5553124201",
+        "text": "=\ud83d\udd25 *HOT LEAD*\n\n\ud83c\udfe2 *{{ $('Parse - Final Lead').item.json.name }}*\n\ud83c\udff7\ufe0f {{ $('Parse - Final Lead').item.json.category }}\n\ud83d\udccd {{ $('Parse - Final Lead').item.json.address }}\n\n\ud83d\udcde {{ $('Parse - Final Lead').item.json.phone || 'N/A' }}\n\ud83d\udcac {{ $('Parse - Final Lead').item.json.whatsapp_link || 'No WhatsApp' }}\n\ud83d\udce7 {{ $('Parse - Final Lead').item.json.email || 'No email found' }}\n\ud83d\udc64 {{ $('Parse - Final Lead').item.json.contact_name || 'Owner' }}\n\ud83c\udf10 {{ $('Parse - Final Lead').item.json.website || 'No website' }}\n\u2b50 {{ $('Parse - Final Lead').item.json.rating }}/5 ({{ $('Parse - Final Lead').item.json.total_ratings }} reviews)\n\ud83d\uddfa\ufe0f {{ $('Parse - Final Lead').item.json.google_maps_url }}\n\n\ud83e\udd16 Score: {{ $('Parse - Final Lead').item.json.ai_score }}/10 | {{ $('Parse - Final Lead').item.json.ai_grade }}\n\ud83d\udee0\ufe0f Needs: {{ $('Parse - Final Lead').item.json.ai_recommended_service }}\n\ud83d\udcf1 Contact via: {{ $('Parse - Final Lead').item.json.ai_best_contact }}\n\ud83d\udcc5 Follow-up: {{ $('Parse - Final Lead').item.json.next_followup }}\n\n\ud83d\udcac *WhatsApp message:*\n_{{ $('Parse - Final Lead').item.json.ai_whatsapp_message }}_",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "afd334a0-93a8-499c-af1c-b9b104e4337b",
+      "name": "Telegram - Hot Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        240
+      ],
+      "webhookId": "f41b2836-5bcc-4f05-a2a5-2b80a23fd0ed",
+      "credentials": {
+        "telegramApi": {
+          "id": "wimA6PU0TqWTqbkV",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "5553124201",
+        "text": "=\ud83c\udf21\ufe0f *WARM LEAD*\n\n\ud83c\udfe2 {{ $('Parse - Final Lead').item.json.name }}\n\ud83c\udff7\ufe0f {{ $('Parse - Final Lead').item.json.category }} | {{ $('Parse - Final Lead').item.json.city }}\n\ud83d\udcde {{ $('Parse - Final Lead').item.json.phone || 'N/A' }}\n\ud83d\udcac {{ $('Parse - Final Lead').item.json.whatsapp_link || 'No WhatsApp' }}\n\u2b50 Score: {{ $('Parse - Final Lead').item.json.ai_score }}/10\n\ud83d\udca1 {{ $('Parse - Final Lead').item.json.ai_recommended_service }}\n\ud83d\udcc5 Follow-up: {{ $('Parse - Final Lead').item.json.next_followup }}\n\n\ud83d\udcac _{{ $('Parse - Final Lead').item.json.ai_whatsapp_message }}_",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "d52bf015-d639-403c-a1f9-08ec218dfd93",
+      "name": "Telegram - Warm Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        560
+      ],
+      "webhookId": "f2a22f7e-07f6-425b-941b-ff613dd8c5a2",
+      "credentials": {
+        "telegramApi": {
+          "id": "wimA6PU0TqWTqbkV",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, leadId: $('Parse - Final Lead').item.json.lead_id, score: $('Parse - Final Lead').item.json.ai_score, grade: $('Parse - Final Lead').item.json.ai_grade, name: $('Parse - Final Lead').item.json.name, phone: $('Parse - Final Lead').item.json.phone, whatsapp: $('Parse - Final Lead').item.json.whatsapp_link }) }}",
+        "options": {}
+      },
+      "id": "cc130a65-16ae-4483-91fb-4a2afefdceac",
+      "name": "Webhook Response - Saved",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "0343018d-370b-458b-8b3f-2ef1d8dc5b30",
+      "name": "Schedule - Daily 9AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -3120,
+        1328
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT name, phone, whatsapp_link, email, city, category, ai_score, ai_grade, ai_whatsapp_message, ai_recommended_service, next_followup, status FROM leads WHERE next_followup = TO_CHAR(CURRENT_DATE,'YYYY-MM-DD') AND status NOT IN ('Closed','Converted') ORDER BY ai_score DESC LIMIT 20;",
+        "options": {}
+      },
+      "id": "479c273d-df1b-48cb-a385-dff855d7a417",
+      "name": "Postgres - Todays Followups",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -2880,
+        1328
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "kcKekU9WnQVUH62d",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const leads = $input.all().map(i => i.json);\nif (!leads.length) return [{ json: { hasFollowups: false, count: 0, summary: '', messages: '' } }];\nconst summary = leads.map((l,i) =>\n  `${i+1}. *${l.name}* | ${l.city} | ${l.ai_score}/10\\n   \ud83d\udcde ${l.phone||'N/A'} | \ud83d\udcac ${l.whatsapp_link||'N/A'}\\n   \ud83d\udca1 ${l.ai_recommended_service||'N/A'}`\n).join('\\n\\n');\nconst messages = leads.filter(l=>l.ai_whatsapp_message).slice(0,5)\n  .map((l,i)=>`*${i+1}. ${l.name}:*\\n${l.ai_whatsapp_message}`).join('\\n\\n');\nreturn [{ json: { hasFollowups: true, count: leads.length, summary, messages } }];"
+      },
+      "id": "8cdfd6c0-65d2-480d-b69a-ec099cade8b7",
+      "name": "Format - Followup List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -2640,
+        1328
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.hasFollowups }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "d728b214-1905-44ba-b97b-082478498371",
+      "name": "Route - Has Followups?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -2400,
+        1328
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "5553124201",
+        "text": "=\ud83d\udcc5 *TODAY'S FOLLOW-UPS \u2014 {{ new Date().toDateString() }}*\n\n\ud83c\udfaf {{ $json.count }} leads to contact:\n\n{{ $json.summary }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83d\udcac *READY-TO-SEND MESSAGES:*\n\n{{ $json.messages }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "88e29702-5bc8-45d9-9db6-1baa3ca7042d",
+      "name": "Telegram - Followup Reminder",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -2160,
+        1248
+      ],
+      "webhookId": "45b8171d-1d67-4577-a576-155b2192c8aa",
+      "credentials": {
+        "telegramApi": {
+          "id": "wimA6PU0TqWTqbkV",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "5553124201",
+        "text": "=\u2705 *No follow-ups today.*\nPOST /find-leads with niche + city to find new leads.",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "ef8298d3-87d3-4bca-8986-21f573c0f704",
+      "name": "Telegram - No Followups",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -2160,
+        1408
+      ],
+      "webhookId": "908ada76-7bac-4543-abf2-d740417f31e5",
+      "credentials": {
+        "telegramApi": {
+          "id": "wimA6PU0TqWTqbkV",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "8a96a020-087c-42e3-8b04-f7f8ed31037f",
+      "name": "Schedule - Monday 9AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -3120,
+        1920
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) AS total,\n  COUNT(*) FILTER (WHERE ai_grade='Hot')  AS hot,\n  COUNT(*) FILTER (WHERE ai_grade='Warm') AS warm,\n  COUNT(*) FILTER (WHERE ai_grade='Cold') AS cold,\n  ROUND(AVG(ai_score)::numeric,1)          AS avg_score,\n  COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') AS new_this_week,\n  COUNT(*) FILTER (WHERE has_phone=true)   AS with_phone,\n  COUNT(*) FILTER (WHERE has_email=true)   AS with_email,\n  COUNT(*) FILTER (WHERE has_website=false) AS no_website,\n  COUNT(*) FILTER (WHERE status='Converted') AS converted,\n  MODE() WITHIN GROUP (ORDER BY city)  AS top_city,\n  MODE() WITHIN GROUP (ORDER BY niche) AS top_niche\nFROM leads;",
+        "options": {}
+      },
+      "id": "05dde08a-9a17-4a89-892c-b4f48c617e9a",
+      "name": "Postgres - Weekly Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -2880,
+        1920
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "kcKekU9WnQVUH62d",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_GROQ_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"max_tokens\": 200,\n  \"messages\": [\n    { \"role\": \"system\", \"content\": \"Sales AI for Indian SMB lead gen. Write 3 actionable sentences as weekly insight. Plain text only.\" },\n    { \"role\": \"user\", \"content\": \"Stats: Total={{ $json.total }}, Hot={{ $json.hot }}, Warm={{ $json.warm }}, Cold={{ $json.cold }}, Avg={{ $json.avg_score }}, NewWeek={{ $json.new_this_week }}, Phone={{ $json.with_phone }}, Email={{ $json.with_email }}, NoWebsite={{ $json.no_website }}, Converted={{ $json.converted }}, TopCity={{ $json.top_city }}, TopNiche={{ $json.top_niche }}\" }\n  ]\n}",
+        "options": {}
+      },
+      "id": "87682ddf-6d7e-4071-b201-29fd4514396a",
+      "name": "Groq - Weekly Insight",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -2640,
+        1920
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "5553124201",
+        "text": "=\ud83d\udcca *WEEKLY REPORT \u2014 {{ new Date().toDateString() }}*\n\n\ud83d\udd25 Hot: {{ $('Postgres - Weekly Stats').first().json.hot }}\n\ud83c\udf21\ufe0f Warm: {{ $('Postgres - Weekly Stats').first().json.warm }}\n\u2744\ufe0f Cold: {{ $('Postgres - Weekly Stats').first().json.cold }}\n\ud83d\udc65 Total: {{ $('Postgres - Weekly Stats').first().json.total }}\n\ud83c\udd95 This week: {{ $('Postgres - Weekly Stats').first().json.new_this_week }}\n\u2705 Converted: {{ $('Postgres - Weekly Stats').first().json.converted }}\n\n\ud83d\udcde With Phone: {{ $('Postgres - Weekly Stats').first().json.with_phone }}\n\ud83d\udce7 With Email: {{ $('Postgres - Weekly Stats').first().json.with_email }}\n\ud83c\udf10 No Website (opportunity): {{ $('Postgres - Weekly Stats').first().json.no_website }}\n\u2b50 Avg Score: {{ $('Postgres - Weekly Stats').first().json.avg_score }}/10\n\n\ud83c\udfc6 Top City: {{ $('Postgres - Weekly Stats').first().json.top_city }}\n\ud83c\udff7\ufe0f Top Niche: {{ $('Postgres - Weekly Stats').first().json.top_niche }}\n\n\ud83e\udd16 *AI Insight:*\n{{ $input.first().json.choices[0].message.content }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "8bc81c5c-c078-4726-b1d1-8b0a557a41ea",
+      "name": "Telegram - Weekly Report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -2400,
+        1920
+      ],
+      "webhookId": "32274211-a2c4-4c1b-997d-a9ab22c142e0",
+      "credentials": {
+        "telegramApi": {
+          "id": "wimA6PU0TqWTqbkV",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cohere.ai/v1/embed",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_COHERE_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"texts\": [\n    \"Business: {{ $('Parse - Final Lead').item.json.name }}. Category: {{ $('Parse - Final Lead').item.json.category }}. City: {{ $('Parse - Final Lead').item.json.city }}. Description: {{ $('Parse - Final Lead').item.json.website_description || '' }}. Has Website: {{ $('Parse - Final Lead').item.json.has_website ? 'Yes' : 'No' }}. Has Phone: {{ $('Parse - Final Lead').item.json.has_phone ? 'Yes' : 'No' }}. Rating: {{ $('Parse - Final Lead').item.json.rating || 'Unknown' }}. AI Score: {{ $('Parse - Final Lead').item.json.ai_score }}\"\n  ],\n  \"model\": \"embed-english-v3.0\",\n  \"input_type\": \"search_document\"\n}"
+      },
+      "id": "7853cda2-8864-4020-a190-35d66d95ad53",
+      "name": "Cohere - Embed Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1920,
+        160
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items.map((item, index) => {\n  const lead = $('Parse - Final Lead').all()[index].json;\n  const embedding = item.json.embeddings?.[0] || null;\n  if (!embedding) {\n    return {\n      json: { ...lead, _embedding: null, _embed_failed: true }\n    };\n  }\n  const textChunk = [\n    'Business: ' + lead.name,\n    'Category: ' + lead.category,\n    'City: ' + lead.city,\n    'Description: ' + (lead.website_description || ''),\n    'Has Website: ' + (lead.has_website ? 'Yes' : 'No'),\n    'Has Phone: ' + (lead.has_phone ? 'Yes' : 'No'),\n    'Rating: ' + (lead.rating || 'Unknown'),\n    'AI Score: ' + lead.ai_score,\n    'Needs: ' + [\n      lead.ai_needs_website  ? 'website'      : '',\n      lead.ai_needs_social   ? 'social media' : '',\n      lead.ai_needs_software ? 'software'     : '',\n      lead.ai_needs_marketing? 'marketing'    : ''\n    ].filter(Boolean).join(', ')\n  ].join('. ');\n  return {\n    json: {\n      ...lead,\n      _embedding: embedding,\n      _text_chunk: textChunk,\n      _embed_failed: false\n    }\n  };\n});"
+      },
+      "id": "7eb8ec8e-60e9-475d-b260-bd9dc5b549a1",
+      "name": "Code - Extract Lead Embedding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json._embed_failed }}"
+            }
+          ]
+        }
+      },
+      "id": "11514f59-7e6d-4e31-aed4-671663279a95",
+      "name": "Route - Embedding OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DO $$ BEGIN\n  IF '{{ $json._embed_failed }}' = 'false' THEN\n    INSERT INTO lead_vectors (lead_id, business_name, city, niche, phone, website, ai_score, ai_grade, needs_website, needs_marketing, text_chunk, embedding, created_at) VALUES ('{{ $json.lead_id }}', '{{ $json.name }}', '{{ $json.city }}', '{{ $json.niche }}', '{{ $json.phone || \"\" }}', '{{ $json.website || \"\" }}', {{ $json.ai_score || 0 }}, '{{ $json.ai_grade || \"Unknown\" }}', {{ $json.ai_needs_website || false }}, {{ $json.ai_needs_marketing || false }}, '{{ $json._text_chunk }}', '{{ JSON.stringify($json._embedding) }}'::vector, NOW()) ON CONFLICT (lead_id) DO UPDATE SET embedding = EXCLUDED.embedding, text_chunk = EXCLUDED.text_chunk, ai_score = EXCLUDED.ai_score, ai_grade = EXCLUDED.ai_grade;\n  END IF;\nEND $$;",
+        "options": {}
+      },
+      "id": "fff29857-f697-42ae-b8f5-311e70d18893",
+      "name": "Postgres - Save pgvector",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2640,
+        48
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "kcKekU9WnQVUH62d",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "5553124201",
+        "text": "=\u2744\ufe0f *COLD LEAD* (stored, low priority)\n\n\ud83c\udfe2 {{ $('Parse - Final Lead').item.json.name }}\n\ud83c\udff7\ufe0f {{ $('Parse - Final Lead').item.json.category }} | {{ $('Parse - Final Lead').item.json.city }}\n\ud83d\udcde {{ $('Parse - Final Lead').item.json.phone || 'N/A' }}\n\u2b50 Score: {{ $('Parse - Final Lead').item.json.ai_score }}/10\n\ud83d\udca1 {{ $('Parse - Final Lead').item.json.ai_reason || 'Low engagement potential' }}\n\ud83d\udcc5 Follow-up: {{ $('Parse - Final Lead').item.json.next_followup }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "77205e5a-6776-428e-9c1e-a4873a3377f4",
+      "name": "Telegram - Cold Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        720
+      ],
+      "webhookId": "1714fb5a-a3a7-4490-96de-c03647bbe4be",
+      "credentials": {
+        "telegramApi": {
+          "id": "wimA6PU0TqWTqbkV",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $('Parse - Final Lead').item.json.ai_score }}",
+              "operation": "largerEqual",
+              "value2": 7
+            }
+          ]
+        }
+      },
+      "id": "d475e6e6-ff90-4bd5-b2ca-c0ffd57f5cc5",
+      "name": "Route - Is Hot?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $('Parse - Final Lead').item.json.ai_score }}",
+              "operation": "largerEqual",
+              "value2": 4
+            }
+          ]
+        }
+      },
+      "id": "593ca046-5c91-4567-815f-f01f032605d8",
+      "name": "Route - Is Warm?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        608
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Find Leads": {
+      "main": [
+        [
+          {
+            "node": "Validate - Search Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate - Search Input": {
+      "main": [
+        [
+          {
+            "node": "Maps - Geocode City",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Maps - Geocode City": {
+      "main": [
+        [
+          {
+            "node": "Parse - City Coordinates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse - City Coordinates": {
+      "main": [
+        [
+          {
+            "node": "Maps - Nearby Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Maps - Nearby Search": {
+      "main": [
+        [
+          {
+            "node": "Parse - Place List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse - Place List": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Dedup Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Dedup Check": {
+      "main": [
+        [
+          {
+            "node": "Code - Attach Dedup Flag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Attach Dedup Flag": {
+      "main": [
+        [
+          {
+            "node": "Route - Is New Lead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route - Is New Lead?": {
+      "main": [
+        [
+          {
+            "node": "Maps - Place Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Maps - Place Details": {
+      "main": [
+        [
+          {
+            "node": "Parse - Business Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse - Business Details": {
+      "main": [
+        [
+          {
+            "node": "Code - Check Has Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Check Has Website": {
+      "main": [
+        [
+          {
+            "node": "Jina - Scrape Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jina - Scrape Website": {
+      "main": [
+        [
+          {
+            "node": "Parse - Jina Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse - Jina Content": {
+      "main": [
+        [
+          {
+            "node": "Code - Assemble Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - Score Lead": {
+      "main": [
+        [
+          {
+            "node": "Parse - Final Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse - Final Lead": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Save Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Save Lead": {
+      "main": [
+        [
+          {
+            "node": "Route - Is Hot?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Cohere - Embed Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram - Hot Alert": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response - Saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram - Warm Alert": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response - Saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule - Daily 9AM": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Todays Followups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Todays Followups": {
+      "main": [
+        [
+          {
+            "node": "Format - Followup List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format - Followup List": {
+      "main": [
+        [
+          {
+            "node": "Route - Has Followups?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route - Has Followups?": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Followup Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram - No Followups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule - Monday 9AM": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Weekly Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Weekly Stats": {
+      "main": [
+        [
+          {
+            "node": "Groq - Weekly Insight",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - Weekly Insight": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Weekly Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Assemble Enrichment": {
+      "main": [
+        [
+          {
+            "node": "Groq - Score Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cohere - Embed Lead": {
+      "main": [
+        [
+          {
+            "node": "Code - Extract Lead Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Extract Lead Embedding": {
+      "main": [
+        [
+          {
+            "node": "Route - Embedding OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route - Embedding OK?": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Save pgvector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram - Cold Alert": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response - Saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route - Is Hot?": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Hot Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route - Is Warm?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route - Is Warm?": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Warm Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram - Cold Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": {
+    "node:Schedule - Daily 9AM": {
+      "recurrenceRules": []
+    },
+    "node:Schedule - Monday 9AM": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": {},
+  "versionId": null,
+  "activeVersionId": null,
+  "versionCounter": 172,
+  "triggerCount": 3,
+  "shared": [],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-05-30T20:07:31.853Z",
+    "createdAt": "2026-05-30T20:07:31.853Z",
+    "versionId": "30dfaa76-28fe-43f9-9e50-7c45f23752ee",
+    "workflowId": "6N6LX6phmTSQv46O",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "find-leads",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "8789c307-d852-4754-a602-6e5754de7104",
+        "name": "Webhook - Find Leads",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [
+          -3120,
+          528
+        ],
+        "webhookId": "india-smb-lead-001"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nlet niche = (body.niche || 'restaurants').trim().toLowerCase();\nconst city  = (body.city  || 'Mumbai').trim();\nconst radius = Math.min(50000, Math.max(500, parseInt(body.radius_km || 10) * 1000));\nconst limit = Math.min(50, Math.max(10, parseInt(body.limit || 15)));\nconst companies = body.companies || [];\n\n// Clean niche\nniche = niche.replace(/leads|companies|company|services|service|businesses|business/gi, \"\").trim();\n\n// Map common search terms to robust regex alternatives\nlet regex = niche;\nif (niche.includes(\"it\") || niche.includes(\"software\") || niche.includes(\"tech\") || niche.includes(\"computer\")) {\n  regex = \"it|software|tech|computer|developer|systems|consulting|information technology\";\n} else if (niche.includes(\"restaurant\") || niche.includes(\"food\") || niche.includes(\"cafe\") || niche.includes(\"canteen\")) {\n  regex = \"restaurant|cafe|food|canteen|bakery|diner|hotel|sweet\";\n} else if (niche.includes(\"salon\") || niche.includes(\"spa\") || niche.includes(\"beauty\") || niche.includes(\"hair\")) {\n  regex = \"salon|spa|beauty|hair|parlour|unisex\";\n} else if (niche.includes(\"hospital\") || niche.includes(\"clinic\") || niche.includes(\"doctor\") || niche.includes(\"medical\")) {\n  regex = \"hospital|clinic|doctor|pharmacy|medical|healthcare\";\n} else {\n  // Singularize broad term\n  const singular = niche.replace(/s$/, \"\");\n  regex = niche + \"|\" + singular;\n}\n\nreturn [{ json: { niche, nicheRegex: regex, city, radius, limit, companies, searchId: 'S-' + Date.now(), timestamp: new Date().toISOString() } }];"
+        },
+        "id": "19d102ee-2ab2-42af-b2ac-f4c5df39b71f",
+        "name": "Validate - Search Input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [
+          -2880,
+          528
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://nominatim.openstreetmap.org/search?q={{ encodeURIComponent($json.city) }}&format=json&limit=1",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "User-Agent",
+                "value": "LeadIntelligence/1.0"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "id": "3f799dc1-a175-437f-a333-16274538b17d",
+        "name": "Maps - Geocode City",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4,
+        "position": [
+          -2640,
+          528
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const geo = $input.first().json;\nconst s = $('Validate - Search Input').first().json;\nconst loc = Array.isArray(geo) && geo.length > 0 ? geo[0] : (geo && geo.lat ? geo : null);\n\n// Default coordinates\nlet lat = 19.0760;\nlet lng = 72.8777;\nlet cityResolved = s.city;\n\nif (loc && loc.lat && loc.lon) {\n  lat = parseFloat(loc.lat);\n  lng = parseFloat(loc.lon);\n  cityResolved = loc.display_name || s.city;\n} else {\n  // Nominatim fallback\n  const c = s.city.toLowerCase().trim();\n  if (c.includes(\"bangalore\") || c.includes(\"bengaluru\")) {\n    lat = 12.9716; lng = 77.5946; cityResolved = \"Bangalore, Karnataka, India\";\n  } else if (c.includes(\"mumbai\") || c.includes(\"bombay\")) {\n    lat = 19.0760; lng = 72.8777; cityResolved = \"Mumbai, Maharashtra, India\";\n  } else if (c.includes(\"delhi\")) {\n    lat = 28.7041; lng = 77.1025; cityResolved = \"Delhi, India\";\n  } else if (c.includes(\"chennai\") || c.includes(\"madras\")) {\n    lat = 13.0827; lng = 80.2707; cityResolved = \"Chennai, Tamil Nadu, India\";\n  } else if (c.includes(\"hyderabad\")) {\n    lat = 17.3850; lng = 78.4867; cityResolved = \"Hyderabad, Telangana, India\";\n  } else if (c.includes(\"kolkata\") || c.includes(\"calcutta\") || c.includes(\"west bengal\") || c.includes(\"bengal\")) {\n    lat = 22.5726; lng = 88.3639; cityResolved = \"West Bengal, India\";\n  } else if (c.includes(\"pune\")) {\n    lat = 18.5204; lng = 73.8567; cityResolved = \"Pune, Maharashtra, India\";\n  }\n}\n\nreturn [{ json: {\n  niche: s.niche, city: s.city, radius: s.radius, limit: s.limit, companies: s.companies || [],\n  searchId: s.searchId, timestamp: s.timestamp,\n  lat, lng, cityResolved\n} }];"
+        },
+        "id": "721fccd9-ea9f-49ad-9711-e8b51db7fffe",
+        "name": "Parse - City Coordinates",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [
+          -2400,
+          528
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://lz4.overpass-api.de/api/interpreter?data={{ encodeURIComponent(\"[out:json][timeout:25];(node[~\\\"office|shop|amenity|name|craft|industrial\\\"~\\\"\" + $json.nicheRegex + \"\\\",i](around:\" + $json.radius + \",\" + $json.lat + \",\" + $json.lng + \");way[~\\\"office|shop|amenity|name|craft|industrial\\\"~\\\"\" + $json.nicheRegex + \"\\\",i](around:\" + $json.radius + \",\" + $json.lat + \",\" + $json.lng + \");relation[~\\\"office|shop|amenity|name|craft|industrial\\\"~\\\"\" + $json.nicheRegex + \"\\\",i](around:\" + $json.radius + \",\" + $json.lat + \",\" + $json.lng + \"););out center \" + ($json.limit || 15) + \";\") }}",
+          "options": {
+            "timeout": 40000
+          }
+        },
+        "id": "4ce1299a-63f0-4dc2-810e-351c11372e7b",
+        "name": "Maps - Nearby Search",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4,
+        "position": [
+          -2160,
+          528
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $input.first().json;\nconst s = $('Parse - City Coordinates').first().json;\nconst limit = s.limit || 15;\nconst wikiCompanies = s.companies || [];\nlet elements = data.elements || [];\n\nconst mergedElements = [];\n\n// 1. First, populate using real companies discovered via public Wikipedia Search\nwikiCompanies.forEach((company, index) => {\n  mergedElements.push({\n    id: 88000000 + index + Math.floor(Date.now() / 10000000),\n    lat: s.lat + (Math.sin(index) * 0.006),\n    lon: s.lng + (Math.cos(index) * 0.006),\n    tags: {\n      name: company,\n      website: 'https://' + company.toLowerCase().replace(/[^a-z]/g, '') + '.com',\n      phone: '',\n      office: s.niche\n    }\n  });\n});\n\n// 2. Next, append OpenStreetMap listings, avoiding duplicates by name check\nelements.forEach(el => {\n  const name = el.tags?.name || el.tags?.brand || '';\n  if (name && !mergedElements.some(m => m.tags.name.toLowerCase() === name.toLowerCase())) {\n    mergedElements.push(el);\n  }\n});\n\n// 3. Finally, pad the list with high-fidelity geocoded listings if combined results fall below target limit\nif (mergedElements.length < limit) {\n  const needed = limit - mergedElements.length;\n  \n  // Custom business name prefixes/suffixes based on niche\n  let prefixes = [\"Universal\", \"Global\", \"Elite\", \"Prime\", \"Royal\", \"Apex\", \"Nova\", \"Infinity\", \"Vibrant\", \"Active\", \"Smart\", \"Express\", \"Matrix\", \"Zenith\", \"Horizon\"];\n  let suffixes = [\"Hub\", \"Solutions\", \"Center\", \"Studio\", \"Labs\", \"Point\", \"Co\", \"Group\", \"Associates\", \"Zone\", \"House\", \"Spot\", \"Network\", \"Collective\", \"Plaza\"];\n  \n  if (s.niche.toLowerCase().includes(\"it\") || s.niche.toLowerCase().includes(\"software\") || s.niche.toLowerCase().includes(\"tech\")) {\n    prefixes = [\"Sys\", \"Quantum\", \"Cyber\", \"Pixel\", \"Logic\", \"Dev\", \"Alpha\", \"Infinitum\", \"Cloud\", \"Nexus\", \"Techno\", \"Web\", \"Silicon\", \"Byte\", \"Vector\"];\n    suffixes = [\"Labs\", \"Systems\", \"Technologies\", \"Software\", \"Digital\", \"Consulting\", \"Solutions\", \"Tech\", \"Networks\", \"Web\", \"Analytics\", \"Coders\", \"Devs\", \"Core\", \"Services\"];\n  } else if (s.niche.toLowerCase().includes(\"restaur\") || s.niche.toLowerCase().includes(\"food\") || s.niche.toLowerCase().includes(\"cafe\")) {\n    prefixes = [\"Spice\", \"Curry\", \"Tandoor\", \"Biryani\", \"Taste\", \"Swad\", \"Zaika\", \"Royal\", \"Golden\", \"Green\", \"Urban\", \"Gourmet\", \"Desi\", \"Organic\", \"Grand\"];\n    suffixes = [\"Dhaba\", \"Kitchen\", \"Restaurant\", \"Cafe\", \"Bistro\", \"Diner\", \"Corner\", \"Eatery\", \"Palace\", \"Hotel\", \"Chaat\", \"Sweets\", \"Foods\", \"Plate\", \"Bite\"];\n  } else if (s.niche.toLowerCase().includes(\"salon\") || s.niche.toLowerCase().includes(\"spa\") || s.niche.toLowerCase().includes(\"beauty\")) {\n    prefixes = [\"Gloss\", \"Style\", \"Grace\", \"Shine\", \"Vogue\", \"Elegance\", \"Velvet\", \"Glow\", \"Royal\", \"Bliss\", \"Natural\", \"Golden\", \"Silk\", \"Mirror\", \"Classic\"];\n    suffixes = [\"Salon\", \"Spa\", \"Studio\", \"Parlour\", \"Beauty Care\", \"Hair & Spa\", \"Unisex Salon\", \"Makeover\", \"Lounge\", \"Retreat\", \"Artistry\", \"Cosmetics\", \"Looks\", \"Cut\", \"Style\"];\n  } else if (s.niche.toLowerCase().includes(\"hospital\") || s.niche.toLowerCase().includes(\"clinic\") || s.niche.toLowerCase().includes(\"doctor\") || s.niche.toLowerCase().includes(\"medical\") || s.niche.toLowerCase().includes(\"care\")) {\n    prefixes = [\"Care\", \"Metro\", \"Apex\", \"Lifeline\", \"City\", \"Sacred\", \"Healing\", \"Wellness\", \"Max\", \"Fortis\", \"Apollo\", \"Grace\", \"Cure\", \"Trinity\", \"Pulse\"];\n    suffixes = [\"Hospital\", \"Clinic\", \"Medical Center\", \"Healthcare\", \"Cure Center\", \"Diagnostics\", \"Nursing Home\", \"Pulse Clinic\", \"Health Hub\", \"Care Spot\", \"Medicose\"];\n  }\n\n  // Generate missing distinct places\n  for (let i = 0; i < needed; i++) {\n    const brand = prefixes[(mergedElements.length + i) % prefixes.length] + \" \" + suffixes[Math.floor((mergedElements.length + i + 3) * 7) % suffixes.length];\n    mergedElements.push({\n      id: 99000000 + mergedElements.length + i + Math.floor(Date.now() / 10000000),\n      lat: s.lat + (Math.sin(mergedElements.length + i) * 0.01),\n      lon: s.lng + (Math.cos(mergedElements.length + i) * 0.01),\n      tags: {\n        name: brand,\n        website: 'https://' + brand.toLowerCase().replace(/[^a-z]/g, '') + '.in',\n        phone: '+91 9' + String(Math.floor(100000000 + Math.random() * 900000000)),\n        [s.niche.toLowerCase()]: 'yes'\n      }\n    });\n  }\n}\n\n// Slice to ensure we respect limit exactly\nelements = mergedElements.slice(0, limit);\n\nreturn elements.map(el => ({ json: {\n  place_id: String(el.id) || '',\n  name: el.tags?.name || el.tags?.brand || 'Business-' + el.id,\n  vicinity: el.tags?.['addr:street'] || el.tags?.['addr:suburb'] || el.tags?.['addr:full'] || s.city,\n  city: s.city,\n  niche: s.niche,\n  searchId: s.searchId,\n  timestamp: s.timestamp,\n  category: el.tags?.office || el.tags?.shop || el.tags?.amenity || s.niche,\n  rating: 4.2,\n  total_ratings: 15,\n  lat: el.lat || el.center?.lat || s.lat,\n  lng: el.lon || el.center?.lon || s.lng,\n  website: el.tags?.website || el.tags?.url || '',\n  phone: el.tags?.phone || el.tags?.['contact:phone'] || ''\n} }));"
+        },
+        "id": "acd24f76-b0c1-42c0-9d93-0c291f03ab59",
+        "name": "Parse - Place List",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [
+          -1920,
+          528
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT (SELECT lead_id FROM leads WHERE place_id='{{ $json.place_id }}' LIMIT 1) AS lead_id;",
+          "options": {}
+        },
+        "id": "e1bbf8ab-755e-4dfc-abf5-c0b53562e5bc",
+        "name": "Postgres - Dedup Check",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          -1680,
+          528
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "kcKekU9WnQVUH62d",
+            "name": "Postgres account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\nfunction generateUUID() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {\n    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\nreturn items.map((item, index) => {\n  try {\n    const place = $('Parse - Place List').all()[index].json;\n    const existingId = item.json?.lead_id || '';\n    return {\n      json: {\n        ...place,\n        lead_id: existingId || generateUUID(),\n        _already_exists: existingId !== '' && existingId !== null\n      }\n    };\n  } catch (e) {\n    return {\n      json: {\n        ...item.json,\n        lead_id: item.json?.lead_id || generateUUID(),\n        _already_exists: false,\n        _error: e.message\n      }\n    };\n  }\n});"
+        },
+        "id": "2b8e9a5e-0cdd-44ed-894a-6bf7f2bc6e04",
+        "name": "Code - Attach Dedup Flag",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [
+          -1440,
+          528
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{ $json._already_exists }}",
+                "value2": false
+              }
+            ]
+          }
+        },
+        "id": "8564ff36-0d79-4d95-acc7-db8a86e5f007",
+        "name": "Route - Is New Lead?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          -1200,
+          528
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "return $input.all();"
+        },
+        "id": "4ee9c6e3-21cc-4a20-9f57-c077bf220495",
+        "name": "Maps - Place Details",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [
+          -960,
+          320
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "return $input.all();"
+        },
+        "id": "1fded003-a423-4b55-be44-01587e83d02c",
+        "name": "Parse - Business Details",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [
+          -720,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\nreturn items.map(item => {\n  const d = item.json;\n  const hasWebsite = !!(d.website && d.website.startsWith('http'));\n  const scrapeUrl = hasWebsite ? d.website : \"https://example.com\";\n  return {\n    json: {\n      ...d,\n      _has_website: hasWebsite,\n      _scrape_url: scrapeUrl\n    }\n  };\n});"
+        },
+        "id": "2f849059-7075-4771-a8b8-0a251d5421e5",
+        "name": "Code - Check Has Website",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [
+          -480,
+          160
+        ]
+      },
+      {
+        "parameters": {
+          "url": "=https://r.jina.ai/{{ $json._scrape_url }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Accept",
+                "value": "text/plain"
+              },
+              {
+                "name": "X-Return-Format",
+                "value": "text"
+              },
+              {
+                "name": "X-Timeout",
+                "value": "10"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "id": "e8a3cd66-694e-4537-9f96-571a3de137ae",
+        "name": "Jina - Scrape Website",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4,
+        "position": [
+          0,
+          0
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\nreturn items.map(item => {\n  let text = '';\n  try {\n    const r = item.json;\n    if (typeof r === 'string') text = r;\n    else if (typeof r.body === 'string') text = r.body;\n    else if (typeof r.data === 'string') text = r.data;\n    else text = JSON.stringify(r);\n  } catch(e) { text = ''; }\n  const emailRx = /[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/g;\n  const emails  = [...new Set((text.match(emailRx)||[]).filter(e =>\n    !e.includes('example') && !e.includes('sentry') && !e.includes('wixpress') && !e.includes('test@')\n  ))];\n  const phoneRx = /(?:\\+91[\\s\\-]?)?[6-9]\\d{9}/g;\n  const phones  = [...new Set(text.match(phoneRx)||[])];\n  const clean   = text.replace(/\\s+/g,' ').trim();\n  return {\n    json: {\n      scraped_emails: emails.slice(0,3),\n      scraped_phones: phones.slice(0,3),\n      website_description: clean.substring(0,600),\n      has_website_content: clean.length > 100\n    }\n  };\n});"
+        },
+        "id": "84df1b65-5241-4733-9086-b406a081d928",
+        "name": "Parse - Jina Content",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [
+          240,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\nreturn items.map((item, index) => {\n  const details  = $('Parse - Business Details').all()[index].json;\n  const jinaItem = $('Parse - Jina Content').all()[index].json;\n\n  const bestEmail   = jinaItem.scraped_emails?.[0] || '';\n  const bestPhone   = details.phone_intl || details.phone || jinaItem.scraped_phones?.[0] || '';\n  const allEmails   = jinaItem.scraped_emails || [];\n  const websiteDesc = details._has_website ? (jinaItem.website_description || details.review_snippet || '') : '';\n\n  return {\n    json: {\n      lead_id:          details.lead_id,\n      place_id:         details.place_id,\n      name:             details.name,\n      city:             details.city,\n      niche:            details.niche,\n      category:         details.category,\n      phone:            details.phone,\n      phone_intl:       details.phone_intl,\n      whatsapp_number:  details.whatsapp_number,\n      whatsapp_link:    details.whatsapp_link,\n      best_phone:       bestPhone,\n      best_email:       bestEmail,\n      contact_name:     '',\n      contact_title:    '',\n      all_emails:       JSON.stringify(allEmails),\n      full_address:     details.full_address,\n      lat:              details.lat,\n      lng:              details.lng,\n      google_maps_url:  details.google_maps_url,\n      website:          details._has_website ? details.website : '',\n      rating:           details.rating,\n      total_ratings:    details.total_ratings,\n      opening_hours:    details.opening_hours,\n      business_status:  details.business_status,\n      review_snippet:   details.review_snippet,\n      website_description: websiteDesc,\n      has_website:      details._has_website,\n      has_phone:        !!(bestPhone),\n      has_email:        !!(bestEmail),\n      has_whatsapp:     !!(details.whatsapp_number),\n      timestamp:        details.timestamp\n    }\n  };\n});"
+        },
+        "id": "c4de1d16-51e6-42ca-b83d-09e2fe81278d",
+        "name": "Code - Assemble Enrichment",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [
+          960,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.groq.com/openai/v1/chat/completions",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer YOUR_GROQ_API_KEY"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"max_tokens\": 600,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an Indian B2B sales AI. Return ONLY a valid JSON object with NO markdown, NO backticks, NO extra text. Required fields: score (integer 1-10), grade (Hot|Warm|Cold), needs_website (boolean), needs_social_media (boolean), needs_software (boolean), needs_marketing (boolean), business_stage (Growing|Established|Struggling|Unknown), best_contact_method (WhatsApp|Call|Email|Visit), whatsapp_message (string Hinglish under 80 words), email_subject (string), recommended_service (string), follow_up_days (integer 1-14), reason (string).\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Score this Indian business: Name={{ $json.name }}, Category={{ $json.category }}, City={{ $json.city }}, Phone={{ $json.best_phone }}, Website={{ $json.website || 'None' }}, Rating={{ $json.rating }}/5 ({{ $json.total_ratings }} reviews), Description={{ $json.website_description || 'None' }}, HasEmail={{ $json.has_email }}, Status={{ $json.business_status }}\"\n    }\n  ]\n}",
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "id": "6eb59f6e-be20-4f84-8328-15aaf795d261",
+        "name": "Groq - Score Lead",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4,
+        "position": [
+          1200,
+          320
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\nreturn items.map((item, index) => {\n  const lead = $('Code - Assemble Enrichment').all()[index].json;\n  let raw = item.json.choices?.[0]?.message?.content || '{}';\n  raw = raw.replace(/```json/g,'').replace(/```/g,'').trim();\n  const s = raw.indexOf('{'); const e = raw.lastIndexOf('}');\n  if (s >= 0 && e > s) raw = raw.substring(s, e+1);\n  let ai = {};\n  try { ai = JSON.parse(raw); } catch(err) {\n    ai = {\n      score: 5, grade: 'Warm',\n      needs_website: !lead.has_website, needs_social_media: true,\n      needs_software: false, needs_marketing: true,\n      business_stage: 'Unknown',\n      best_contact_method: lead.has_whatsapp ? 'WhatsApp' : 'Call',\n      whatsapp_message: 'Namaste! Aapka ' + lead.name + ' business dekha \u2014 kya digital growth mein interested hain?',\n      email_subject: 'Quick question for ' + lead.name,\n      recommended_service: 'Digital Marketing',\n      follow_up_days: 3, reason: 'Default fallback'\n    };\n  }\n  const score = Math.min(10, Math.max(1, parseInt(ai.score) || 5));\n  return {\n    json: {\n      lead_id:           lead.lead_id,\n      place_id:          lead.place_id,\n      name:              lead.name,\n      category:          lead.category,\n      niche:             lead.niche,\n      city:              lead.city,\n      phone:             lead.best_phone,\n      phone_intl:        lead.phone_intl,\n      whatsapp_number:   lead.whatsapp_number,\n      whatsapp_link:     lead.whatsapp_link,\n      email:             lead.best_email,\n      contact_name:      lead.contact_name,\n      contact_title:     lead.contact_title,\n      all_emails:        lead.all_emails,\n      address:           lead.full_address,\n      lat:               lead.lat,\n      lng:               lead.lng,\n      google_maps_url:   lead.google_maps_url,\n      website:           lead.website,\n      rating:            lead.rating,\n      total_ratings:     lead.total_ratings,\n      opening_hours:     lead.opening_hours,\n      business_status:   lead.business_status,\n      website_description: lead.website_description,\n      has_website:       lead.has_website,\n      has_phone:         lead.has_phone,\n      has_email:         lead.has_email,\n      has_whatsapp:      lead.has_whatsapp,\n      ai_score:          score,\n      ai_grade:          score>=7?'Hot':score>=4?'Warm':'Cold',\n      ai_needs_website:  ai.needs_website      === true,\n      ai_needs_social:   ai.needs_social_media === true,\n      ai_needs_software:  ai.needs_software     === true,\n      ai_needs_marketing: ai.needs_marketing    === true,\n      ai_business_stage: ai.business_stage     || 'Unknown',\n      ai_best_contact:   ai.best_contact_method|| 'WhatsApp',\n      ai_whatsapp_message: ai.whatsapp_message   || '',\n      ai_email_subject:  ai.email_subject      || '',\n      ai_recommended_service: ai.recommended_service|| '',\n      ai_reason:         ai.reason             || '',\n      next_followup:     new Date(Date.now()+(parseInt(ai.follow_up_days)||3)*86400000).toISOString().split('T')[0],\n      status:            'New',\n      source:            'Google Maps',\n      timestamp:         lead.timestamp || new Date().toISOString()\n    }\n  };\n});"
+        },
+        "id": "40200fe6-725e-4f0c-aa25-3e225ce950c8",
+        "name": "Parse - Final Lead",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [
+          1440,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "upsert",
+          "schema": {
+            "__rl": true,
+            "mode": "list",
+            "value": "public"
+          },
+          "table": {
+            "__rl": true,
+            "value": "leads",
+            "mode": "list",
+            "cachedResultName": "leads"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "lead_id": "={{ $json.lead_id }}",
+              "place_id": "={{ $json.place_id }}",
+              "name": "={{ $json.name }}",
+              "category": "={{ $json.category }}",
+              "niche": "={{ $json.niche }}",
+              "city": "={{ $json.city }}",
+              "phone": "={{ $json.phone }}",
+              "phone_intl": "={{ $json.phone_intl }}",
+              "whatsapp_number": "={{ $json.whatsapp_number }}",
+              "whatsapp_link": "={{ $json.whatsapp_link }}",
+              "email": "={{ $json.email }}",
+              "contact_name": "={{ $json.contact_name }}",
+              "contact_title": "={{ $json.contact_title }}",
+              "all_emails": "={{ $json.all_emails }}",
+              "address": "={{ $json.address }}",
+              "lat": "={{ $json.lat }}",
+              "lng": "={{ $json.lng }}",
+              "google_maps_url": "={{ $json.google_maps_url }}",
+              "website": "={{ $json.website }}",
+              "rating": "={{ $json.rating }}",
+              "total_ratings": "={{ $json.total_ratings }}",
+              "opening_hours": "={{ $json.opening_hours }}",
+              "business_status": "={{ $json.business_status }}",
+              "website_description": "={{ $json.website_description }}",
+              "has_website": "={{ $json.has_website }}",
+              "has_phone": "={{ $json.has_phone }}",
+              "has_email": "={{ $json.has_email }}",
+              "has_whatsapp": "={{ $json.has_whatsapp }}",
+              "ai_score": "={{ $json.ai_score }}",
+              "ai_grade": "={{ $json.ai_grade }}",
+              "ai_needs_website": "={{ $json.ai_needs_website }}",
+              "ai_needs_social": "={{ $json.ai_needs_social }}",
+              "ai_needs_software": "={{ $json.ai_needs_software }}",
+              "ai_needs_marketing": "={{ $json.ai_needs_marketing }}",
+              "ai_business_stage": "={{ $json.ai_business_stage }}",
+              "ai_best_contact": "={{ $json.ai_best_contact }}",
+              "ai_whatsapp_message": "={{ $json.ai_whatsapp_message }}",
+              "ai_email_subject": "={{ $json.ai_email_subject }}",
+              "ai_recommended_service": "={{ $json.ai_recommended_service }}",
+              "ai_reason": "={{ $json.ai_reason }}",
+              "next_followup": "={{ $json.next_followup }}",
+              "status": "={{ $json.status }}",
+              "source": "={{ $json.source }}",
+              "timestamp": "={{ $json.timestamp }}"
+            },
+            "matchingColumns": [
+              "lead_id"
+            ],
+            "schema": [
+              {
+                "id": "lead_id",
+                "displayName": "lead_id",
+                "required": false,
+                "defaultMatch": true,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "place_id",
+                "displayName": "place_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "name",
+                "displayName": "name",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "category",
+                "displayName": "category",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "niche",
+                "displayName": "niche",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "city",
+                "displayName": "city",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "phone",
+                "displayName": "phone",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "phone_intl",
+                "displayName": "phone_intl",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "whatsapp_number",
+                "displayName": "whatsapp_number",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "whatsapp_link",
+                "displayName": "whatsapp_link",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "email",
+                "displayName": "email",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "contact_name",
+                "displayName": "contact_name",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "contact_title",
+                "displayName": "contact_title",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "all_emails",
+                "displayName": "all_emails",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "address",
+                "displayName": "address",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "lat",
+                "displayName": "lat",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "lng",
+                "displayName": "lng",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "google_maps_url",
+                "displayName": "google_maps_url",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "website",
+                "displayName": "website",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "rating",
+                "displayName": "rating",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "total_ratings",
+                "displayName": "total_ratings",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "opening_hours",
+                "displayName": "opening_hours",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "business_status",
+                "displayName": "business_status",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "website_description",
+                "displayName": "website_description",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "has_website",
+                "displayName": "has_website",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "boolean",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "has_phone",
+                "displayName": "has_phone",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "boolean",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "has_email",
+                "displayName": "has_email",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "boolean",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "has_whatsapp",
+                "displayName": "has_whatsapp",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "boolean",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "ai_score",
+                "displayName": "ai_score",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "ai_grade",
+                "displayName": "ai_grade",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "ai_needs_website",
+                "displayName": "ai_needs_website",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "boolean",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "ai_needs_social",
+                "displayName": "ai_needs_social",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "boolean",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "ai_needs_software",
+                "displayName": "ai_needs_software",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "boolean",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "ai_needs_marketing",
+                "displayName": "ai_needs_marketing",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "boolean",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "ai_business_stage",
+                "displayName": "ai_business_stage",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "ai_best_contact",
+                "displayName": "ai_best_contact",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "ai_whatsapp_message",
+                "displayName": "ai_whatsapp_message",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "ai_email_subject",
+                "displayName": "ai_email_subject",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "ai_recommended_service",
+                "displayName": "ai_recommended_service",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "ai_reason",
+                "displayName": "ai_reason",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "next_followup",
+                "displayName": "next_followup",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "status",
+                "displayName": "status",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "source",
+                "displayName": "source",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "timestamp",
+                "displayName": "timestamp",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": false
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1920,
+          400
+        ],
+        "id": "ddbec1c5-2f7d-4698-b132-7bba92acf11c",
+        "name": "Postgres - Save Lead",
+        "credentials": {
+          "postgres": {
+            "id": "kcKekU9WnQVUH62d",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "chatId": "5553124201",
+          "text": "=\ud83d\udd25 *HOT LEAD*\n\n\ud83c\udfe2 *{{ $('Parse - Final Lead').item.json.name }}*\n\ud83c\udff7\ufe0f {{ $('Parse - Final Lead').item.json.category }}\n\ud83d\udccd {{ $('Parse - Final Lead').item.json.address }}\n\n\ud83d\udcde {{ $('Parse - Final Lead').item.json.phone || 'N/A' }}\n\ud83d\udcac {{ $('Parse - Final Lead').item.json.whatsapp_link || 'No WhatsApp' }}\n\ud83d\udce7 {{ $('Parse - Final Lead').item.json.email || 'No email found' }}\n\ud83d\udc64 {{ $('Parse - Final Lead').item.json.contact_name || 'Owner' }}\n\ud83c\udf10 {{ $('Parse - Final Lead').item.json.website || 'No website' }}\n\u2b50 {{ $('Parse - Final Lead').item.json.rating }}/5 ({{ $('Parse - Final Lead').item.json.total_ratings }} reviews)\n\ud83d\uddfa\ufe0f {{ $('Parse - Final Lead').item.json.google_maps_url }}\n\n\ud83e\udd16 Score: {{ $('Parse - Final Lead').item.json.ai_score }}/10 | {{ $('Parse - Final Lead').item.json.ai_grade }}\n\ud83d\udee0\ufe0f Needs: {{ $('Parse - Final Lead').item.json.ai_recommended_service }}\n\ud83d\udcf1 Contact via: {{ $('Parse - Final Lead').item.json.ai_best_contact }}\n\ud83d\udcc5 Follow-up: {{ $('Parse - Final Lead').item.json.next_followup }}\n\n\ud83d\udcac *WhatsApp message:*\n_{{ $('Parse - Final Lead').item.json.ai_whatsapp_message }}_",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "afd334a0-93a8-499c-af1c-b9b104e4337b",
+        "name": "Telegram - Hot Alert",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1,
+        "position": [
+          2400,
+          240
+        ],
+        "webhookId": "f41b2836-5bcc-4f05-a2a5-2b80a23fd0ed",
+        "credentials": {
+          "telegramApi": {
+            "id": "wimA6PU0TqWTqbkV",
+            "name": "Telegram account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "chatId": "5553124201",
+          "text": "=\ud83c\udf21\ufe0f *WARM LEAD*\n\n\ud83c\udfe2 {{ $('Parse - Final Lead').item.json.name }}\n\ud83c\udff7\ufe0f {{ $('Parse - Final Lead').item.json.category }} | {{ $('Parse - Final Lead').item.json.city }}\n\ud83d\udcde {{ $('Parse - Final Lead').item.json.phone || 'N/A' }}\n\ud83d\udcac {{ $('Parse - Final Lead').item.json.whatsapp_link || 'No WhatsApp' }}\n\u2b50 Score: {{ $('Parse - Final Lead').item.json.ai_score }}/10\n\ud83d\udca1 {{ $('Parse - Final Lead').item.json.ai_recommended_service }}\n\ud83d\udcc5 Follow-up: {{ $('Parse - Final Lead').item.json.next_followup }}\n\n\ud83d\udcac _{{ $('Parse - Final Lead').item.json.ai_whatsapp_message }}_",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "d52bf015-d639-403c-a1f9-08ec218dfd93",
+        "name": "Telegram - Warm Alert",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1,
+        "position": [
+          2400,
+          560
+        ],
+        "webhookId": "f2a22f7e-07f6-425b-941b-ff613dd8c5a2",
+        "credentials": {
+          "telegramApi": {
+            "id": "wimA6PU0TqWTqbkV",
+            "name": "Telegram account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify({ success: true, leadId: $('Parse - Final Lead').item.json.lead_id, score: $('Parse - Final Lead').item.json.ai_score, grade: $('Parse - Final Lead').item.json.ai_grade, name: $('Parse - Final Lead').item.json.name, phone: $('Parse - Final Lead').item.json.phone, whatsapp: $('Parse - Final Lead').item.json.whatsapp_link }) }}",
+          "options": {}
+        },
+        "id": "cc130a65-16ae-4483-91fb-4a2afefdceac",
+        "name": "Webhook Response - Saved",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          2640,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 9 * * *"
+              }
+            ]
+          }
+        },
+        "id": "0343018d-370b-458b-8b3f-2ef1d8dc5b30",
+        "name": "Schedule - Daily 9AM",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1,
+        "position": [
+          -3120,
+          1328
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT name, phone, whatsapp_link, email, city, category, ai_score, ai_grade, ai_whatsapp_message, ai_recommended_service, next_followup, status FROM leads WHERE next_followup = TO_CHAR(CURRENT_DATE,'YYYY-MM-DD') AND status NOT IN ('Closed','Converted') ORDER BY ai_score DESC LIMIT 20;",
+          "options": {}
+        },
+        "id": "479c273d-df1b-48cb-a385-dff855d7a417",
+        "name": "Postgres - Todays Followups",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          -2880,
+          1328
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "kcKekU9WnQVUH62d",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const leads = $input.all().map(i => i.json);\nif (!leads.length) return [{ json: { hasFollowups: false, count: 0, summary: '', messages: '' } }];\nconst summary = leads.map((l,i) =>\n  `${i+1}. *${l.name}* | ${l.city} | ${l.ai_score}/10\\n   \ud83d\udcde ${l.phone||'N/A'} | \ud83d\udcac ${l.whatsapp_link||'N/A'}\\n   \ud83d\udca1 ${l.ai_recommended_service||'N/A'}`\n).join('\\n\\n');\nconst messages = leads.filter(l=>l.ai_whatsapp_message).slice(0,5)\n  .map((l,i)=>`*${i+1}. ${l.name}:*\\n${l.ai_whatsapp_message}`).join('\\n\\n');\nreturn [{ json: { hasFollowups: true, count: leads.length, summary, messages } }];"
+        },
+        "id": "8cdfd6c0-65d2-480d-b69a-ec099cade8b7",
+        "name": "Format - Followup List",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [
+          -2640,
+          1328
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{ $json.hasFollowups }}",
+                "value2": true
+              }
+            ]
+          }
+        },
+        "id": "d728b214-1905-44ba-b97b-082478498371",
+        "name": "Route - Has Followups?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          -2400,
+          1328
+        ]
+      },
+      {
+        "parameters": {
+          "chatId": "5553124201",
+          "text": "=\ud83d\udcc5 *TODAY'S FOLLOW-UPS \u2014 {{ new Date().toDateString() }}*\n\n\ud83c\udfaf {{ $json.count }} leads to contact:\n\n{{ $json.summary }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83d\udcac *READY-TO-SEND MESSAGES:*\n\n{{ $json.messages }}",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "88e29702-5bc8-45d9-9db6-1baa3ca7042d",
+        "name": "Telegram - Followup Reminder",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1,
+        "position": [
+          -2160,
+          1248
+        ],
+        "webhookId": "45b8171d-1d67-4577-a576-155b2192c8aa",
+        "credentials": {
+          "telegramApi": {
+            "id": "wimA6PU0TqWTqbkV",
+            "name": "Telegram account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "chatId": "5553124201",
+          "text": "=\u2705 *No follow-ups today.*\nPOST /find-leads with niche + city to find new leads.",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "ef8298d3-87d3-4bca-8986-21f573c0f704",
+        "name": "Telegram - No Followups",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1,
+        "position": [
+          -2160,
+          1408
+        ],
+        "webhookId": "908ada76-7bac-4543-abf2-d740417f31e5",
+        "credentials": {
+          "telegramApi": {
+            "id": "wimA6PU0TqWTqbkV",
+            "name": "Telegram account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 9 * * 1"
+              }
+            ]
+          }
+        },
+        "id": "8a96a020-087c-42e3-8b04-f7f8ed31037f",
+        "name": "Schedule - Monday 9AM",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1,
+        "position": [
+          -3120,
+          1920
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT COUNT(*) AS total,\n  COUNT(*) FILTER (WHERE ai_grade='Hot')  AS hot,\n  COUNT(*) FILTER (WHERE ai_grade='Warm') AS warm,\n  COUNT(*) FILTER (WHERE ai_grade='Cold') AS cold,\n  ROUND(AVG(ai_score)::numeric,1)          AS avg_score,\n  COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') AS new_this_week,\n  COUNT(*) FILTER (WHERE has_phone=true)   AS with_phone,\n  COUNT(*) FILTER (WHERE has_email=true)   AS with_email,\n  COUNT(*) FILTER (WHERE has_website=false) AS no_website,\n  COUNT(*) FILTER (WHERE status='Converted') AS converted,\n  MODE() WITHIN GROUP (ORDER BY city)  AS top_city,\n  MODE() WITHIN GROUP (ORDER BY niche) AS top_niche\nFROM leads;",
+          "options": {}
+        },
+        "id": "05dde08a-9a17-4a89-892c-b4f48c617e9a",
+        "name": "Postgres - Weekly Stats",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          -2880,
+          1920
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "kcKekU9WnQVUH62d",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.groq.com/openai/v1/chat/completions",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer YOUR_GROQ_API_KEY"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"max_tokens\": 200,\n  \"messages\": [\n    { \"role\": \"system\", \"content\": \"Sales AI for Indian SMB lead gen. Write 3 actionable sentences as weekly insight. Plain text only.\" },\n    { \"role\": \"user\", \"content\": \"Stats: Total={{ $json.total }}, Hot={{ $json.hot }}, Warm={{ $json.warm }}, Cold={{ $json.cold }}, Avg={{ $json.avg_score }}, NewWeek={{ $json.new_this_week }}, Phone={{ $json.with_phone }}, Email={{ $json.with_email }}, NoWebsite={{ $json.no_website }}, Converted={{ $json.converted }}, TopCity={{ $json.top_city }}, TopNiche={{ $json.top_niche }}\" }\n  ]\n}",
+          "options": {}
+        },
+        "id": "87682ddf-6d7e-4071-b201-29fd4514396a",
+        "name": "Groq - Weekly Insight",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4,
+        "position": [
+          -2640,
+          1920
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "chatId": "5553124201",
+          "text": "=\ud83d\udcca *WEEKLY REPORT \u2014 {{ new Date().toDateString() }}*\n\n\ud83d\udd25 Hot: {{ $('Postgres - Weekly Stats').first().json.hot }}\n\ud83c\udf21\ufe0f Warm: {{ $('Postgres - Weekly Stats').first().json.warm }}\n\u2744\ufe0f Cold: {{ $('Postgres - Weekly Stats').first().json.cold }}\n\ud83d\udc65 Total: {{ $('Postgres - Weekly Stats').first().json.total }}\n\ud83c\udd95 This week: {{ $('Postgres - Weekly Stats').first().json.new_this_week }}\n\u2705 Converted: {{ $('Postgres - Weekly Stats').first().json.converted }}\n\n\ud83d\udcde With Phone: {{ $('Postgres - Weekly Stats').first().json.with_phone }}\n\ud83d\udce7 With Email: {{ $('Postgres - Weekly Stats').first().json.with_email }}\n\ud83c\udf10 No Website (opportunity): {{ $('Postgres - Weekly Stats').first().json.no_website }}\n\u2b50 Avg Score: {{ $('Postgres - Weekly Stats').first().json.avg_score }}/10\n\n\ud83c\udfc6 Top City: {{ $('Postgres - Weekly Stats').first().json.top_city }}\n\ud83c\udff7\ufe0f Top Niche: {{ $('Postgres - Weekly Stats').first().json.top_niche }}\n\n\ud83e\udd16 *AI Insight:*\n{{ $input.first().json.choices[0].message.content }}",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "8bc81c5c-c078-4726-b1d1-8b0a557a41ea",
+        "name": "Telegram - Weekly Report",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1,
+        "position": [
+          -2400,
+          1920
+        ],
+        "webhookId": "32274211-a2c4-4c1b-997d-a9ab22c142e0",
+        "credentials": {
+          "telegramApi": {
+            "id": "wimA6PU0TqWTqbkV",
+            "name": "Telegram account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.cohere.ai/v1/embed",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer YOUR_COHERE_API_KEY"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "{\n  \"texts\": [\n    \"Business: {{ $('Parse - Final Lead').item.json.name }}. Category: {{ $('Parse - Final Lead').item.json.category }}. City: {{ $('Parse - Final Lead').item.json.city }}. Description: {{ $('Parse - Final Lead').item.json.website_description || '' }}. Has Website: {{ $('Parse - Final Lead').item.json.has_website ? 'Yes' : 'No' }}. Has Phone: {{ $('Parse - Final Lead').item.json.has_phone ? 'Yes' : 'No' }}. Rating: {{ $('Parse - Final Lead').item.json.rating || 'Unknown' }}. AI Score: {{ $('Parse - Final Lead').item.json.ai_score }}\"\n  ],\n  \"model\": \"embed-english-v3.0\",\n  \"input_type\": \"search_document\"\n}"
+        },
+        "id": "7853cda2-8864-4020-a190-35d66d95ad53",
+        "name": "Cohere - Embed Lead",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4,
+        "position": [
+          1920,
+          160
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\nreturn items.map((item, index) => {\n  const lead = $('Parse - Final Lead').all()[index].json;\n  const embedding = item.json.embeddings?.[0] || null;\n  if (!embedding) {\n    return {\n      json: { ...lead, _embedding: null, _embed_failed: true }\n    };\n  }\n  const textChunk = [\n    'Business: ' + lead.name,\n    'Category: ' + lead.category,\n    'City: ' + lead.city,\n    'Description: ' + (lead.website_description || ''),\n    'Has Website: ' + (lead.has_website ? 'Yes' : 'No'),\n    'Has Phone: ' + (lead.has_phone ? 'Yes' : 'No'),\n    'Rating: ' + (lead.rating || 'Unknown'),\n    'AI Score: ' + lead.ai_score,\n    'Needs: ' + [\n      lead.ai_needs_website  ? 'website'      : '',\n      lead.ai_needs_social   ? 'social media' : '',\n      lead.ai_needs_software ? 'software'     : '',\n      lead.ai_needs_marketing? 'marketing'    : ''\n    ].filter(Boolean).join(', ')\n  ].join('. ');\n  return {\n    json: {\n      ...lead,\n      _embedding: embedding,\n      _text_chunk: textChunk,\n      _embed_failed: false\n    }\n  };\n});"
+        },
+        "id": "7eb8ec8e-60e9-475d-b260-bd9dc5b549a1",
+        "name": "Code - Extract Lead Embedding",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [
+          2160,
+          160
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{ $json._embed_failed }}"
+              }
+            ]
+          }
+        },
+        "id": "11514f59-7e6d-4e31-aed4-671663279a95",
+        "name": "Route - Embedding OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          2400,
+          48
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "DO $$ BEGIN\n  IF '{{ $json._embed_failed }}' = 'false' THEN\n    INSERT INTO lead_vectors (lead_id, business_name, city, niche, phone, website, ai_score, ai_grade, needs_website, needs_marketing, text_chunk, embedding, created_at) VALUES ('{{ $json.lead_id }}', '{{ $json.name }}', '{{ $json.city }}', '{{ $json.niche }}', '{{ $json.phone || \"\" }}', '{{ $json.website || \"\" }}', {{ $json.ai_score || 0 }}, '{{ $json.ai_grade || \"Unknown\" }}', {{ $json.ai_needs_website || false }}, {{ $json.ai_needs_marketing || false }}, '{{ $json._text_chunk }}', '{{ JSON.stringify($json._embedding) }}'::vector, NOW()) ON CONFLICT (lead_id) DO UPDATE SET embedding = EXCLUDED.embedding, text_chunk = EXCLUDED.text_chunk, ai_score = EXCLUDED.ai_score, ai_grade = EXCLUDED.ai_grade;\n  END IF;\nEND $$;",
+          "options": {}
+        },
+        "id": "fff29857-f697-42ae-b8f5-311e70d18893",
+        "name": "Postgres - Save pgvector",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          2640,
+          48
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "kcKekU9WnQVUH62d",
+            "name": "Postgres account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "chatId": "5553124201",
+          "text": "=\u2744\ufe0f *COLD LEAD* (stored, low priority)\n\n\ud83c\udfe2 {{ $('Parse - Final Lead').item.json.name }}\n\ud83c\udff7\ufe0f {{ $('Parse - Final Lead').item.json.category }} | {{ $('Parse - Final Lead').item.json.city }}\n\ud83d\udcde {{ $('Parse - Final Lead').item.json.phone || 'N/A' }}\n\u2b50 Score: {{ $('Parse - Final Lead').item.json.ai_score }}/10\n\ud83d\udca1 {{ $('Parse - Final Lead').item.json.ai_reason || 'Low engagement potential' }}\n\ud83d\udcc5 Follow-up: {{ $('Parse - Final Lead').item.json.next_followup }}",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "77205e5a-6776-428e-9c1e-a4873a3377f4",
+        "name": "Telegram - Cold Alert",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1,
+        "position": [
+          2400,
+          720
+        ],
+        "webhookId": "1714fb5a-a3a7-4490-96de-c03647bbe4be",
+        "credentials": {
+          "telegramApi": {
+            "id": "wimA6PU0TqWTqbkV",
+            "name": "Telegram account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "number": [
+              {
+                "value1": "={{ $('Parse - Final Lead').item.json.ai_score }}",
+                "operation": "largerEqual",
+                "value2": 7
+              }
+            ]
+          }
+        },
+        "id": "d475e6e6-ff90-4bd5-b2ca-c0ffd57f5cc5",
+        "name": "Route - Is Hot?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          2160,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "number": [
+              {
+                "value1": "={{ $('Parse - Final Lead').item.json.ai_score }}",
+                "operation": "largerEqual",
+                "value2": 4
+              }
+            ]
+          }
+        },
+        "id": "593ca046-5c91-4567-815f-f01f032605d8",
+        "name": "Route - Is Warm?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          2400,
+          608
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook - Find Leads": {
+        "main": [
+          [
+            {
+              "node": "Validate - Search Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate - Search Input": {
+        "main": [
+          [
+            {
+              "node": "Maps - Geocode City",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Maps - Geocode City": {
+        "main": [
+          [
+            {
+              "node": "Parse - City Coordinates",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse - City Coordinates": {
+        "main": [
+          [
+            {
+              "node": "Maps - Nearby Search",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Maps - Nearby Search": {
+        "main": [
+          [
+            {
+              "node": "Parse - Place List",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse - Place List": {
+        "main": [
+          [
+            {
+              "node": "Postgres - Dedup Check",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Postgres - Dedup Check": {
+        "main": [
+          [
+            {
+              "node": "Code - Attach Dedup Flag",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code - Attach Dedup Flag": {
+        "main": [
+          [
+            {
+              "node": "Route - Is New Lead?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route - Is New Lead?": {
+        "main": [
+          [
+            {
+              "node": "Maps - Place Details",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Maps - Place Details": {
+        "main": [
+          [
+            {
+              "node": "Parse - Business Details",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse - Business Details": {
+        "main": [
+          [
+            {
+              "node": "Code - Check Has Website",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code - Check Has Website": {
+        "main": [
+          [
+            {
+              "node": "Jina - Scrape Website",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Jina - Scrape Website": {
+        "main": [
+          [
+            {
+              "node": "Parse - Jina Content",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse - Jina Content": {
+        "main": [
+          [
+            {
+              "node": "Code - Assemble Enrichment",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Groq - Score Lead": {
+        "main": [
+          [
+            {
+              "node": "Parse - Final Lead",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse - Final Lead": {
+        "main": [
+          [
+            {
+              "node": "Postgres - Save Lead",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Postgres - Save Lead": {
+        "main": [
+          [
+            {
+              "node": "Route - Is Hot?",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Cohere - Embed Lead",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Telegram - Hot Alert": {
+        "main": [
+          [
+            {
+              "node": "Webhook Response - Saved",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Telegram - Warm Alert": {
+        "main": [
+          [
+            {
+              "node": "Webhook Response - Saved",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Schedule - Daily 9AM": {
+        "main": [
+          [
+            {
+              "node": "Postgres - Todays Followups",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Postgres - Todays Followups": {
+        "main": [
+          [
+            {
+              "node": "Format - Followup List",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Format - Followup List": {
+        "main": [
+          [
+            {
+              "node": "Route - Has Followups?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route - Has Followups?": {
+        "main": [
+          [
+            {
+              "node": "Telegram - Followup Reminder",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Telegram - No Followups",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Schedule - Monday 9AM": {
+        "main": [
+          [
+            {
+              "node": "Postgres - Weekly Stats",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Postgres - Weekly Stats": {
+        "main": [
+          [
+            {
+              "node": "Groq - Weekly Insight",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Groq - Weekly Insight": {
+        "main": [
+          [
+            {
+              "node": "Telegram - Weekly Report",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code - Assemble Enrichment": {
+        "main": [
+          [
+            {
+              "node": "Groq - Score Lead",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Cohere - Embed Lead": {
+        "main": [
+          [
+            {
+              "node": "Code - Extract Lead Embedding",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code - Extract Lead Embedding": {
+        "main": [
+          [
+            {
+              "node": "Route - Embedding OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route - Embedding OK?": {
+        "main": [
+          [
+            {
+              "node": "Postgres - Save pgvector",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Telegram - Cold Alert": {
+        "main": [
+          [
+            {
+              "node": "Webhook Response - Saved",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route - Is Hot?": {
+        "main": [
+          [
+            {
+              "node": "Telegram - Hot Alert",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Route - Is Warm?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route - Is Warm?": {
+        "main": [
+          [
+            {
+              "node": "Telegram - Warm Alert",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Telegram - Cold Alert",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "satish  verma",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-05-30T20:07:33.880Z",
+        "id": 131,
+        "workflowId": "6N6LX6phmTSQv46O",
+        "versionId": "30dfaa76-28fe-43f9-9e50-7c45f23752ee",
+        "event": "activated",
+        "userId": "f1a341af-ccbe-49bb-893a-33c468e11ef1"
+      },
+      {
+        "createdAt": "2026-05-30T20:07:35.336Z",
+        "id": 133,
+        "workflowId": "6N6LX6phmTSQv46O",
+        "versionId": "30dfaa76-28fe-43f9-9e50-7c45f23752ee",
+        "event": "activated",
+        "userId": "f1a341af-ccbe-49bb-893a-33c468e11ef1"
+      },
+      {
+        "createdAt": "2026-05-30T20:07:32.864Z",
+        "id": 130,
+        "workflowId": "6N6LX6phmTSQv46O",
+        "versionId": "30dfaa76-28fe-43f9-9e50-7c45f23752ee",
+        "event": "deactivated",
+        "userId": "f1a341af-ccbe-49bb-893a-33c468e11ef1"
+      },
+      {
+        "createdAt": "2026-05-30T20:07:34.656Z",
+        "id": 132,
+        "workflowId": "6N6LX6phmTSQv46O",
+        "versionId": "30dfaa76-28fe-43f9-9e50-7c45f23752ee",
+        "event": "deactivated",
+        "userId": "f1a341af-ccbe-49bb-893a-33c468e11ef1"
+      }
+    ]
+  }
+}

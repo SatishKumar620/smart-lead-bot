@@ -1,0 +1,228 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800;900&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+:root {
+  --ink: #05050a;
+  --ink2: #080913;
+  --ink3: #0e1022;
+  --ink4: #151730;
+  --ink5: #1c1f40;
+  --gold: #a855f7;
+  --gold-rgb: 168, 85, 247;
+  --gold2: #06b6d4;
+  --gold2-rgb: 6, 182, 212;
+  --gold-dim: #6366f1;
+  --cream: #f3f4f6;
+  --mist: #d1d5db;
+  --fog: #9ca3af;
+  --line: rgba(168, 85, 247, 0.15);
+  --line2: rgba(6, 182, 212, 0.08);
+  --shine: rgba(168, 85, 247, 0.03);
+  --hot: #f43f5e;
+  --warm: #a855f7;
+  --cold: #06b6d4;
+  --green: #10b981;
+  --r: 20px;
+  
+  --nav-bg: rgba(5, 5, 10, 0.88);
+  --mobile-bg: rgba(5, 5, 10, 0.97);
+  --badge-bg: rgba(5, 5, 10, 0.6);
+  
+  /* Radar animation variables (Dark Mode default) */
+  --radar-circle-1: rgba(168, 85, 247, 0.08);
+  --radar-circle-2: rgba(6, 182, 212, 0.1);
+  --radar-circle-3: rgba(168, 85, 247, 0.13);
+  --radar-circle-4: rgba(6, 182, 212, 0.16);
+  --radar-grid-lines: rgba(168, 85, 247, 0.05);
+  --radar-grid-diag: rgba(6, 182, 212, 0.04);
+  --radar-sweep-opacity: 0.25;
+  --radar-text-opacity: 0.3;
+  
+  color-scheme: dark;
+}
+
+html.light-theme {
+  --ink: #fcfbfe;
+  --ink2: #f5f5fa;
+  --ink3: #ffffff;
+  --ink4: #efeff8;
+  --ink5: #e4e4f5;
+  --gold: #7c3aed;
+  --gold-rgb: 124, 58, 237;
+  --gold2: #0891b2;
+  --gold2-rgb: 8, 145, 178;
+  --gold-dim: #4f46e5;
+  --cream: #0f111a;
+  --mist: #1f2937;
+  --fog: #374151;
+  --line: rgba(124, 58, 237, 0.12);
+  --line2: rgba(8, 145, 178, 0.08);
+  --shine: rgba(124, 58, 237, 0.03);
+  --hot: #e11d48;
+  --warm: #7c3aed;
+  --cold: #0891b2;
+  --green: #059669;
+  
+  --nav-bg: rgba(252, 251, 254, 0.88);
+  --mobile-bg: rgba(252, 251, 254, 0.97);
+  --badge-bg: rgba(252, 251, 254, 0.6);
+  
+  /* Radar animation variables (Light Mode overrides) */
+  --radar-circle-1: rgba(124, 58, 237, 0.12);
+  --radar-circle-2: rgba(124, 58, 237, 0.16);
+  --radar-circle-3: rgba(124, 58, 237, 0.2);
+  --radar-circle-4: rgba(124, 58, 237, 0.24);
+  --radar-grid-lines: rgba(124, 58, 237, 0.08);
+  --radar-grid-diag: rgba(124, 58, 237, 0.06);
+  --radar-sweep-opacity: 0.32;
+  --radar-text-opacity: 0.45;
+  
+  color-scheme: light;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  height: 100%;
+}
+
+body {
+  background: var(--ink);
+  color: var(--cream);
+  font-family: 'Outfit', sans-serif;
+  overflow-x: hidden;
+  min-height: 100%;
+  cursor: none;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: linear-gradient(var(--line2) 1px, transparent 1px),
+                    linear-gradient(90deg, var(--line2) 1px, transparent 1px);
+  background-size: 64px 64px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@media (pointer: coarse) {
+  body {
+    cursor: auto;
+  }
+}
+
+/* Global scrollbars */
+::-webkit-scrollbar {
+  width: 3px;
+}
+::-webkit-scrollbar-track {
+  background: var(--ink);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--gold-dim);
+}
+
+/* Reusable keyframe animations */
+@keyframes pdot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: .25;
+    transform: scale(.55);
+  }
+}
+
+@keyframes livescr {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes tick {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Custom cursor styling classes */
+.cur {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+}
+
+#cd {
+  width: 8px;
+  height: 8px;
+  background: var(--gold);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--gold);
+  transition: transform 0.2s ease;
+}
+
+#cr {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--gold);
+  border-radius: 50%;
+  opacity: 0.4;
+  transition: width 0.35s cubic-bezier(0.23, 1, 0.32, 1),
+              height 0.35s cubic-bezier(0.23, 1, 0.32, 1),
+              opacity 0.25s;
+}
+
+body:has(button:hover) #cr,
+body:has(a:hover) #cr,
+body:has(input:focus) #cr,
+body:has(select:focus) #cr {
+  width: 52px;
+  height: 52px;
+  opacity: 0.85;
+}
+
+body:has(input:focus) #cd,
+body:has(select:focus) #cd {
+  transform: translate(-50%, -50%) scale(1.6);
+}
+
+#grain {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 900;
+  opacity: 0.038;
+  mix-blend-mode: screen;
+}
+
+html.light-theme #grain {
+  mix-blend-mode: multiply;
+  opacity: 0.045;
+}
+
+/* Force specific components (like terminal, database listings, stats) to retain DM Mono font */
+code, pre, .terminal, .live-inner, .stat-val, .ti, .fnode-num, .wic-badge, .bcard-stat, .fchip, .crm-table th, .crm-table td, .db-stat-val, .db-sidebar-foot, .db-logout, .n8n-node-name, .n8n-node-status, .m-val, .act-head, .act-row, .tg-avatar, .tg-name, .tg-status, .tg-bubble, .tg-time, .fchip {
+  font-family: 'DM Mono', monospace !important;
+}
+
