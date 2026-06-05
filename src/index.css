@@ -240,6 +240,70 @@ h1, h2, h3, h4, h5, h6,
   font-weight: 500 !important;
 }
 
+/* Glassmorphism Redesign for Dashboard Cards */
+.db-stat-card,
+.db-map-card,
+.db-chatbot-card,
+.db-finder-card,
+.db-crm-card,
+.db-chart-card,
+.nlp-console-card,
+.opportunity-gaps-card,
+.n8n-timeline,
+.task-card {
+  background: rgba(14, 16, 34, 0.45) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(168, 85, 247, 0.16) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.22) !important;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+}
+
+html.light-theme .db-stat-card,
+html.light-theme .db-map-card,
+html.light-theme .db-chatbot-card,
+html.light-theme .db-finder-card,
+html.light-theme .db-crm-card,
+html.light-theme .db-chart-card,
+html.light-theme .nlp-console-card,
+html.light-theme .opportunity-gaps-card,
+html.light-theme .n8n-timeline,
+html.light-theme .task-card {
+  background: rgba(255, 255, 255, 0.5) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(124, 58, 237, 0.14) !important;
+  box-shadow: 0 8px 32px 0 rgba(124, 58, 237, 0.04) !important;
+}
+
+/* Hover effects for Dashboard Cards */
+.db-stat-card:hover,
+.db-map-card:hover,
+.db-chatbot-card:hover,
+.db-finder-card:hover,
+.db-crm-card:hover,
+.db-chart-card:hover,
+.nlp-console-card:hover,
+.opportunity-gaps-card:hover,
+.task-card:hover {
+  transform: translateY(-4px) !important;
+  border-color: rgba(168, 85, 247, 0.38) !important;
+  box-shadow: 0 12px 40px 0 rgba(168, 85, 247, 0.16) !important;
+}
+
+html.light-theme .db-stat-card:hover,
+html.light-theme .db-map-card:hover,
+html.light-theme .db-chatbot-card:hover,
+html.light-theme .db-finder-card:hover,
+html.light-theme .db-crm-card:hover,
+html.light-theme .db-chart-card:hover,
+html.light-theme .nlp-console-card:hover,
+html.light-theme .opportunity-gaps-card:hover,
+html.light-theme .task-card:hover {
+  border-color: rgba(124, 58, 237, 0.3) !important;
+  box-shadow: 0 12px 40px 0 rgba(124, 58, 237, 0.12) !important;
+}
+
 /* Force specific components (like terminal, database listings, stats) to retain DM Mono font */
 code, pre, .terminal, .live-inner, .stat-val, .ti, .fnode-num, .wic-badge, .bcard-stat, .fchip, .crm-table th, .crm-table td, .db-stat-val, .db-sidebar-foot, .db-logout, .n8n-node-name, .n8n-node-status, .m-val, .act-head, .act-row, .tg-avatar, .tg-name, .tg-status, .tg-bubble, .tg-time, .fchip {
   font-family: 'DM Mono', monospace !important;

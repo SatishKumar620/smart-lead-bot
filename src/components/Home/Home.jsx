@@ -18,7 +18,10 @@ const Home = () => {
   const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
   const [contactStatus, setContactStatus] = useState('');
 
-
+  // Loader states
+  const [loaderVisible, setLoaderVisible] = useState(true);
+  const [loaderProgress, setLoaderProgress] = useState(0);
+  const [loaderText, setLoaderText] = useState('CONNECTING TO THE AUTOMATION CLOUD...');
 
   const handleContactSubmit = async (e) => {
     e.preventDefault();
@@ -54,11 +57,11 @@ const Home = () => {
   // GSAP Animations and Interactive effects
   useEffect(() => {
     const ctx = gsap.context(() => {
-      // 1. Entrance animation for Nav
-      gsap.from('#nav', { y: -64, opacity: 0, duration: 0.8, ease: 'power3.out', delay: 0.1 });
+      // 1. Entrance animation for Nav (paused initially)
+      const navAnim = gsap.from('#nav', { y: -64, opacity: 0, duration: 0.8, ease: 'power3.out', paused: true });
 
-      // 2. Hero Timeline
-      const htl = gsap.timeline({ delay: 0.4 });
+      // 2. Hero Timeline (paused initially)
+      const htl = gsap.timeline({ paused: true });
       htl.to('#hPre', { opacity: 1, y: 0, duration: 0.6, ease: 'power3.out' })
          .to('.h-tl span', { y: '0%', duration: 1, stagger: 0.1, ease: 'power4.out' }, '-=.3')
          .to('#hRule', { width: '60%', duration: 0.9, ease: 'power3.inOut' }, '-=.5')
@@ -79,6 +82,39 @@ const Home = () => {
         };
         tick();
       }, '-=.4');
+
+      // Loader simulation
+      const texts = [
+        'CONNECTING TO THE AUTOMATION CLOUD...',
+        'BOOTING LLM EVALUATION AGENTS...',
+        'SYNCHRONIZING n8n RUNTIME CONTROLLERS...',
+        'COMPILING ANALYTIC METRICS...',
+        'AI PIPELINE SECURED. READY TO SCORE.'
+      ];
+      
+      let timer = 0;
+      const interval = setInterval(() => {
+        timer += 1;
+        setLoaderProgress(prev => Math.min(prev + 1.25, 100));
+        
+        const textIndex = Math.min(Math.floor((timer / 80) * texts.length), texts.length - 1);
+        setLoaderText(texts[textIndex]);
+        
+        if (timer >= 80) {
+          clearInterval(interval);
+          gsap.to('.loader-overlay', {
+            opacity: 0,
+            scale: 1.05,
+            duration: 0.6,
+            ease: 'power3.inOut',
+            onComplete: () => {
+              setLoaderVisible(false);
+              navAnim.play();
+              htl.play();
+            }
+          });
+        }
+      }, 20); // 80 * 20ms = 1.6s
 
       // Helper for ScrollTrigger fade ins
       const sr = (sel, trig, extra = {}) => {
@@ -128,17 +164,6 @@ const Home = () => {
               }, i * 150 + 400);
             });
           }
-        }
-      });
-
-      gsap.to('#wfImg', {
-        opacity: 1,
-        y: 0,
-        duration: 0.9,
-        ease: 'power3.out',
-        scrollTrigger: {
-          trigger: '#wfImg',
-          start: 'top 82%',
         }
       });
 
@@ -318,6 +343,33 @@ const Home = () => {
   return (
     <div ref={containerRef} style={{ position: 'relative', zIndex: 1 }}>
       
+      {/* AWESOME HIGH-TECH INTRO PRELOADER */}
+      {loaderVisible && (
+        <div className="loader-overlay">
+          <div className="loader-box">
+            <div className="loader-scanner"></div>
+            <div className="loader-spinner-wrap">
+              <svg className="loader-spinner" viewBox="0 0 50 50">
+                <circle className="path" cx="25" cy="25" r="20" fill="none" strokeWidth="3.5"></circle>
+              </svg>
+              <div className="loader-progress-val">{Math.round(loaderProgress)}%</div>
+            </div>
+            <div className="loader-logo">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="6" />
+                <circle cx="12" cy="12" r="2" />
+              </svg>
+              <span>lead.ai</span>
+            </div>
+            <div className="loader-text">{loaderText}</div>
+            <div className="loader-bar-bg">
+              <div className="loader-bar-fill" style={{ width: `${loaderProgress}%` }}></div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* NAVIGATION BAR */}
       <nav id="nav">
         <Link className="nlogo" to="/" onClick={closeMobileMenu}>
@@ -828,17 +880,17 @@ const Home = () => {
         </div>
         <div className="strip-grid">
           <div className="strip-img-wrap">
-            <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=600&auto=format&fit=crop" alt="Abstract fluid art" />
+            <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=600&auto=format&fit=crop" alt="Abstract fluid art" loading="lazy" />
             <div className="strip-overlay"></div>
             <span className="strip-label"><span className="strip-tag">Automation</span><br/>Workflow Canvas Overview</span>
           </div>
           <div className="strip-img-wrap">
-            <img src="https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?q=80&w=600&auto=format&fit=crop" alt="Vibrant 3D rendering" />
+            <img src="https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?q=80&w=600&auto=format&fit=crop" alt="Vibrant 3D rendering" loading="lazy" />
             <div className="strip-overlay"></div>
             <span className="strip-label"><span className="strip-tag">AI Node</span><br/>Enforcing JSON Response Schema</span>
           </div>
           <div className="strip-img-wrap">
-            <img src="https://images.unsplash.com/photo-1639762681485-074b7f938ba0?q=80&w=600&auto=format&fit=crop" alt="Abstract wireframe sphere" />
+            <img src="https://images.unsplash.com/photo-1639762681485-074b7f938ba0?q=80&w=600&auto=format&fit=crop" alt="Abstract wireframe sphere" loading="lazy" />
             <div className="strip-overlay"></div>
             <span className="strip-label"><span className="strip-tag">Security</span><br/>Credential & API Key Lock</span>
           </div>
