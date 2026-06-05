@@ -1612,7 +1612,7 @@ const Dashboard = () => {
       </div>
 
       {/* ═══ MAIN CONTENT AREA ═══ */}
-      <div className="db-content">
+      <div className={`db-content active-tab-${activeTab}`}>
 
         {/* HEADER */}
         <div className="db-header">
@@ -2369,7 +2369,7 @@ const Dashboard = () => {
             }
             setQuickIngestStatus('Ingesting...');
             try {
-              const res = await fetch('/api/leads', {
+              const res = await authenticatedFetch('/api/leads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...quickIngestForm, source: 'Dashboard Manual Ingest' })
@@ -2378,11 +2378,19 @@ const Dashboard = () => {
                 setQuickIngestStatus('Lead ingested successfully.');
                 setQuickIngestForm({ company: '', industry: '', location: '', website: '', phone: '', email: '' });
                 setTimeout(() => setQuickIngestStatus(''), 2500);
+
+                // Refresh the leads state to update all dashboard tabs instantly
+                const dbResp = await authenticatedFetch('/api/leads');
+                if (dbResp.ok) {
+                  const data = await dbResp.json();
+                  setLeads(data);
+                }
               } else {
-                setQuickIngestStatus('Ingest failed. Check server logs.');
+                const errData = await res.json().catch(() => ({}));
+                setQuickIngestStatus(errData.error || 'Ingest failed. Check server logs.');
               }
-            } catch {
-              setQuickIngestStatus('Network error. Try again.');
+            } catch (err) {
+              setQuickIngestStatus(err.message || 'Network error. Try again.');
             }
           };
 

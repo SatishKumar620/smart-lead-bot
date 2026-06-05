@@ -1746,3 +1746,193 @@ body:has(.db-map-wrapper:hover) #cr {
 .db-container span:not(.db-stat-val):not(.db-title-wrap h1):not(.db-card-title):not(.db-logo):not(.analysis-mini-val):not(.gap-meter-percentage) {
   font-weight: 500 !important;
 }
+
+/* ── SMALL FONT SIZE SCALING FOR HIGH LEGIBILITY & CLARITY ── */
+.db-stat-lbl { font-size: 11.5px !important; letter-spacing: 0.08em !important; }
+.db-stat-badge { font-size: 11px !important; }
+.chatbot-history-title { font-size: 11.5px !important; }
+.chatbot-history-date { font-size: 11px !important; }
+.n8n-node-status { font-size: 12.5px !important; }
+.n8n-node-desc { font-size: 10.5px !important; }
+.db-filter-chip { font-size: 12.5px !important; }
+.crm-table th { font-size: 12.5px !important; letter-spacing: 0.05em !important; }
+.crm-table td { font-size: 13.5px !important; }
+.crm-table-badge { font-size: 11px !important; }
+.crm-act-btn { font-size: 11.5px !important; }
+.analysis-mini-lbl { font-size: 11px !important; }
+.task-card-meta { font-size: 11.5px !important; }
+.db-refresh-btn { font-size: 12px !important; }
+.db-loading-text { font-size: 12px !important; }
+.db-sidebar-foot { font-size: 12px !important; }
+.db-container label { font-size: 11.5px !important; font-weight: 600 !important; }
+.inline-draft-card span { font-size: 11.5px !important; }
+.task-card-header span { font-size: 11.5px !important; }
+.db-container button { font-weight: 600 !important; }
+
+/* ── PREMIUM BUTTON COLOR SYSTEM (LIGHT & DARK THEME COMPATIBLE) ── */
+.db-refresh-btn {
+  background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%) !important;
+  border: none !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);
+  cursor: pointer !important;
+}
+.db-refresh-btn:hover {
+  background: linear-gradient(135deg, var(--gold-dim) 0%, var(--gold) 100%) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(168, 85, 247, 0.4);
+}
+
+.db-nav-item.active {
+  background: rgba(168, 85, 247, 0.12) !important;
+  border-color: rgba(168, 85, 247, 0.35) !important;
+  color: var(--gold) !important;
+}
+.db-nav-item:hover {
+  background: rgba(168, 85, 247, 0.08) !important;
+  border-color: rgba(168, 85, 247, 0.15) !important;
+}
+
+.db-filter-chip {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  color: var(--mist);
+  transition: all 0.2s ease;
+  cursor: pointer !important;
+}
+.db-filter-chip.active {
+  background: var(--gold) !important;
+  color: #ffffff !important;
+  border-color: var(--gold) !important;
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.3);
+}
+.db-filter-chip:hover:not(.active) {
+  background: rgba(168, 85, 247, 0.1);
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
+.crm-act-btn {
+  background: rgba(168, 85, 247, 0.1) !important;
+  border: 1px solid rgba(168, 85, 247, 0.3) !important;
+  color: var(--gold) !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+.crm-act-btn:hover {
+  background: var(--gold) !important;
+  color: #ffffff !important;
+  border-color: var(--gold) !important;
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.3);
+}
+
+.finder-btn {
+  background: linear-gradient(135deg, var(--gold) 0%, var(--gold2) 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);
+  cursor: pointer !important;
+}
+.finder-btn:hover {
+  background: linear-gradient(135deg, var(--gold2) 0%, var(--gold) 100%) !important;
+  box-shadow: 0 6px 16px rgba(168, 85, 247, 0.4);
+}
+
+.chatbot-new-btn {
+  background: rgba(244, 63, 94, 0.08) !important;
+  border: 1px solid rgba(244, 63, 94, 0.35) !important;
+  color: #f43f5e !important;
+  cursor: pointer !important;
+}
+.chatbot-new-btn:hover {
+  background: #f43f5e !important;
+  color: #ffffff !important;
+  border-color: #f43f5e !important;
+  box-shadow: 0 4px 10px rgba(244, 63, 94, 0.25);
+}
+
+/* Quick Ingest Button & other console action buttons */
+.nlp-console-card button[type="submit"],
+.nlp-console-card form button,
+.db-crm-card button[onClick*="QuickIngest"],
+.db-crm-card form button {
+  background: linear-gradient(135deg, var(--gold) 0%, var(--gold2) 100%) !important;
+  border: none !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);
+  transition: all 0.2s ease !important;
+}
+.nlp-console-card button[type="submit"]:hover,
+.nlp-console-card form button:hover,
+.db-crm-card button[onClick*="QuickIngest"]:hover,
+.db-crm-card form button:hover {
+  background: linear-gradient(135deg, var(--gold2) 0%, var(--gold) 100%) !important;
+  box-shadow: 0 6px 16px rgba(168, 85, 247, 0.4);
+  transform: translateY(-1px);
+}
+
+/* ── BRAND TINTED PREMIUM CARD BACKGROUNDS PER PANEL/TAB ── */
+.active-tab-overview .db-stat-card,
+.active-tab-overview .db-chart-card,
+.active-tab-overview .db-crm-card {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.07) 0%, var(--ink3) 100%) !important;
+  border-color: rgba(168, 85, 247, 0.25) !important;
+  box-shadow: 0 8px 32px rgba(168, 85, 247, 0.05) !important;
+}
+
+.active-tab-map .db-map-card,
+.active-tab-map .db-crm-card {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.07) 0%, var(--ink3) 100%) !important;
+  border-color: rgba(6, 182, 212, 0.25) !important;
+  box-shadow: 0 8px 32px rgba(6, 182, 212, 0.05) !important;
+}
+
+.active-tab-bot .db-chatbot-card {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.05) 0%, var(--ink3) 100%) !important;
+  border-color: rgba(236, 72, 153, 0.25) !important;
+  box-shadow: 0 8px 32px rgba(236, 72, 153, 0.05) !important;
+}
+
+.active-tab-nlp-console .nlp-console-card,
+.active-tab-nlp-console .db-crm-card,
+.active-tab-nlp-console .db-chart-card,
+.active-tab-nlp-console .analysis-mini-card,
+.active-tab-nlp-console .opportunity-gaps-card {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.07) 0%, var(--ink3) 100%) !important;
+  border-color: rgba(16, 185, 129, 0.25) !important;
+  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.05) !important;
+}
+
+.active-tab-manage .db-finder-card,
+.active-tab-manage .db-crm-card,
+.active-tab-manage .nlp-console-card {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.07) 0%, var(--ink3) 100%) !important;
+  border-color: rgba(59, 130, 246, 0.25) !important;
+  box-shadow: 0 8px 32px rgba(59, 130, 246, 0.05) !important;
+}
+
+.active-tab-tasks .db-crm-card,
+.active-tab-tasks .task-card {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.07) 0%, var(--ink3) 100%) !important;
+  border-color: rgba(245, 158, 11, 0.25) !important;
+  box-shadow: 0 8px 32px rgba(245, 158, 11, 0.05) !important;
+}
+
+.active-tab-assigned-tasks .db-crm-card,
+.active-tab-assigned-tasks .task-card {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.07) 0%, var(--ink3) 100%) !important;
+  border-color: rgba(99, 102, 241, 0.25) !important;
+  box-shadow: 0 8px 32px rgba(99, 102, 241, 0.05) !important;
+}
+
+.active-tab-profile .profile-card,
+.active-tab-profile .db-crm-card {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.07) 0%, var(--ink3) 100%) !important;
+  border-color: rgba(139, 92, 246, 0.25) !important;
+  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.05) !important;
+}
+
