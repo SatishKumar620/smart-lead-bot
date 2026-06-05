@@ -305,7 +305,7 @@ html.light-theme .task-card:hover {
 }
 
 /* Force specific components (like terminal, database listings, stats) to retain DM Mono font */
-code, pre, .terminal, .live-inner, .stat-val, .ti, .fnode-num, .wic-badge, .bcard-stat, .fchip, .crm-table th, .crm-table td, .db-stat-val, .db-sidebar-foot, .db-logout, .n8n-node-name, .n8n-node-status, .m-val, .act-head, .act-row, .tg-avatar, .tg-name, .tg-status, .tg-bubble, .tg-time, .fchip {
+code, pre, .terminal, .live-inner, .ti, .fnode-num {
   font-family: 'DM Mono', monospace !important;
 }
 

@@ -1807,7 +1807,7 @@ const Dashboard = () => {
                         onClick={() => setOverviewPage(p => Math.max(1, p - 1))}
                         disabled={safeOvPage === 1}
                         style={{
-                          padding: '6px 14px', fontSize: '11px', fontFamily: "'DM Mono', monospace",
+                          padding: '6px 14px', fontSize: '11px', 
                           background: safeOvPage === 1 ? 'var(--ink3)' : 'rgba(168,85,247,0.12)',
                           border: '1px solid var(--line)', color: safeOvPage === 1 ? 'var(--fog)' : 'var(--cream)',
                           borderRadius: '6px', cursor: safeOvPage === 1 ? 'default' : 'pointer'
@@ -1820,7 +1820,7 @@ const Dashboard = () => {
                           key={pg}
                           onClick={() => setOverviewPage(pg)}
                           style={{
-                            padding: '6px 10px', fontSize: '11px', fontFamily: "'DM Mono', monospace",
+                            padding: '6px 10px', fontSize: '11px', 
                             background: pg === safeOvPage ? 'rgba(168,85,247,0.25)' : 'var(--ink3)',
                             border: pg === safeOvPage ? '1px solid #a855f7' : '1px solid var(--line)',
                             color: pg === safeOvPage ? '#c084fc' : 'var(--mist)',
@@ -1834,7 +1834,7 @@ const Dashboard = () => {
                         onClick={() => setOverviewPage(p => Math.min(totalOvPages, p + 1))}
                         disabled={safeOvPage === totalOvPages}
                         style={{
-                          padding: '6px 14px', fontSize: '11px', fontFamily: "'DM Mono', monospace",
+                          padding: '6px 14px', fontSize: '11px', 
                           background: safeOvPage === totalOvPages ? 'var(--ink3)' : 'rgba(168,85,247,0.12)',
                           border: '1px solid var(--line)', color: safeOvPage === totalOvPages ? 'var(--fog)' : 'var(--cream)',
                           borderRadius: '6px', cursor: safeOvPage === totalOvPages ? 'default' : 'pointer'
@@ -2142,7 +2142,7 @@ const Dashboard = () => {
                     border: '1px solid var(--line)',
                     color: 'var(--cream)',
                     padding: '12px 18px',
-                    fontFamily: "'DM Mono', monospace",
+                    
                     fontSize: '12.5px',
                     outline: 'none',
                     width: '130px',
@@ -2433,7 +2433,7 @@ const Dashboard = () => {
                   </div>
                   <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '16px', marginTop: '4px' }}>
                     <button type="submit" style={{
-                      padding: '10px 24px', fontSize: '12px', fontFamily: "'DM Mono', monospace",
+                      padding: '10px 24px', fontSize: '12px', 
                       background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.4)',
                       color: '#c084fc', borderRadius: '8px', cursor: 'pointer', letterSpacing: '.06em', textTransform: 'uppercase'
                     }}>
@@ -2539,7 +2539,7 @@ const Dashboard = () => {
                       animation: 'nidFade 0.2s ease-out',
                       flexWrap: 'wrap'
                     }}>
-                      <span style={{ color: 'var(--cream)', fontSize: '12px', fontFamily: "'DM Mono', monospace" }}>
+                      <span style={{ color: 'var(--cream)', fontSize: '12px',  }}>
                         Selected: <strong>{selectedLeadIds.length}</strong>
                       </span>
                       
@@ -2755,8 +2755,8 @@ const Dashboard = () => {
                                 {/* Actions */}
                                 <td>
                                   <div style={{ display: 'flex', gap: '6px' }}>
-                                    <button onClick={() => handleLeadSave(lead.leadId)} style={{ padding: '6px 10px', background: 'var(--green)', border: 'none', color: 'var(--ink)', cursor: 'pointer', fontFamily: "'DM Mono', monospace", fontSize: '11px' }}>Save</button>
-                                    <button onClick={() => setEditingLeadId(null)} style={{ padding: '6px 10px', background: 'rgba(255,255,255,0.08)', border: '1px solid var(--line)', color: 'var(--cream)', cursor: 'pointer', fontFamily: "'DM Mono', monospace", fontSize: '11px' }}>Cancel</button>
+                                    <button onClick={() => handleLeadSave(lead.leadId)} style={{ padding: '6px 10px', background: 'var(--green)', border: 'none', color: 'var(--ink)', cursor: 'pointer',  fontSize: '11px' }}>Save</button>
+                                    <button onClick={() => setEditingLeadId(null)} style={{ padding: '6px 10px', background: 'rgba(255,255,255,0.08)', border: '1px solid var(--line)', color: 'var(--cream)', cursor: 'pointer',  fontSize: '11px' }}>Cancel</button>
                                   </div>
                                 </td>
                               </>
@@ -2810,7 +2810,7 @@ const Dashboard = () => {
                                 {/* Read Mode Actions */}
                                 <td>
                                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                    <button onClick={() => handleLeadEditInit(lead)} style={{ padding: '4px 8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--line)', color: 'var(--cream)', cursor: 'pointer', fontFamily: "'DM Mono', monospace", fontSize: '11px' }}>Edit</button>
+                                    <button onClick={() => handleLeadEditInit(lead)} style={{ padding: '4px 8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--line)', color: 'var(--cream)', cursor: 'pointer',  fontSize: '11px' }}>Edit</button>
                                     <button onClick={async () => {
                                       const nextStatus = lead.status === 'Contacted' ? 'New' : 'Contacted';
                                       try {
@@ -2822,7 +2822,7 @@ const Dashboard = () => {
                                         const dbResp = await authenticatedFetch('/api/leads');
                                         if (dbResp.ok) setLeads(await dbResp.json());
                                       } catch(e) { console.error(e); }
-                                    }} style={{ padding: '4px 8px', background: lead.status === 'Contacted' ? 'rgba(74, 222, 128, 0.1)' : 'rgba(255,255,255,0.02)', border: '1px solid var(--line)', color: lead.status === 'Contacted' ? '#4ade80' : 'var(--mist)', cursor: 'pointer', fontFamily: "'DM Mono', monospace", fontSize: '11px' }}>
+                                    }} style={{ padding: '4px 8px', background: lead.status === 'Contacted' ? 'rgba(74, 222, 128, 0.1)' : 'rgba(255,255,255,0.02)', border: '1px solid var(--line)', color: lead.status === 'Contacted' ? '#4ade80' : 'var(--mist)', cursor: 'pointer',  fontSize: '11px' }}>
                                       {lead.status === 'Contacted' ? '✓ Contacted' : '✗ Mark Contacted'}
                                     </button>
                                     <button
@@ -3111,20 +3111,20 @@ const Dashboard = () => {
               <div className="db-crm-card" style={{ marginBottom: '20px', padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
                   <span className="db-card-title" style={{ fontSize: '15px' }}>Task Assignment Board</span>
-                  <p style={{ color: 'var(--fog)', fontSize: '12px', marginTop: '4px', fontFamily: "'DM Mono', monospace" }}>
+                  <p style={{ color: 'var(--fog)', fontSize: '12px', marginTop: '4px',  }}>
                     Delegate and track tasks across your team using templates or custom workflows.
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   {taskActiveMode !== 'board' ? (
-                    <button onClick={resetTaskForm} style={{ padding: '9px 18px', fontSize: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--fog)', borderRadius: '8px', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                    <button onClick={resetTaskForm} style={{ padding: '9px 18px', fontSize: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--fog)', borderRadius: '8px', cursor: 'pointer',  }}>
                       ← Back to Board
                     </button>
                   ) : (
                     <>
                       <button
                         onClick={() => setTaskActiveMode('template')}
-                        style={{ padding: '9px 18px', fontSize: '12px', background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc', borderRadius: '8px', cursor: 'pointer', fontFamily: "'DM Mono', monospace", letterSpacing: '.04em' }}
+                        style={{ padding: '9px 18px', fontSize: '12px', background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc', borderRadius: '8px', cursor: 'pointer',  letterSpacing: '.04em' }}
                       >
                         Use Template
                       </button>
@@ -3142,7 +3142,7 @@ const Dashboard = () => {
               {/* ── TEMPLATE PICKER ────────────────────────────────────── */}
               {taskActiveMode === 'template' && (
                 <div style={{ marginBottom: '24px' }}>
-                  <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--fog)', marginBottom: '16px', fontFamily: "'DM Mono', monospace" }}>
+                  <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--fog)', marginBottom: '16px',  }}>
                     Choose a template to pre-fill task fields and milestones
                   </p>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
@@ -3171,15 +3171,15 @@ const Dashboard = () => {
                             <p style={{ fontSize: '10px', color: 'var(--fog)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '6px' }}>Includes {tpl.defaults.milestones.length} milestones</p>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               {tpl.defaults.milestones.slice(0, 3).map((m, i) => (
-                                <span key={i} style={{ fontSize: '11px', color: 'var(--fog)', fontFamily: "'DM Mono', monospace" }}>· {m}</span>
+                                <span key={i} style={{ fontSize: '11px', color: 'var(--fog)',  }}>· {m}</span>
                               ))}
-                              {tpl.defaults.milestones.length > 3 && <span style={{ fontSize: '11px', color: tpl.color, fontFamily: "'DM Mono', monospace" }}>+ {tpl.defaults.milestones.length - 3} more...</span>}
+                              {tpl.defaults.milestones.length > 3 && <span style={{ fontSize: '11px', color: tpl.color,  }}>+ {tpl.defaults.milestones.length - 3} more...</span>}
                             </div>
                           </div>
                         )}
                         {tpl.id === 'custom' && (
                           <div style={{ marginTop: '12px', borderTop: `1px solid ${tpl.border}`, paddingTop: '10px' }}>
-                            <p style={{ fontSize: '11px', color: 'var(--gold)', fontFamily: "'DM Mono', monospace" }}>Define your own milestones, title, and assignees →</p>
+                            <p style={{ fontSize: '11px', color: 'var(--gold)',  }}>Define your own milestones, title, and assignees →</p>
                           </div>
                         )}
                       </div>
@@ -3195,7 +3195,7 @@ const Dashboard = () => {
                   {currentTpl && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                       <span style={{ color: currentTpl.color }}>{currentTpl.icon}</span>
-                      <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.08em', color: currentTpl.color, fontFamily: "'DM Mono', monospace" }}>{currentTpl.label} Template</span>
+                      <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.08em', color: currentTpl.color,  }}>{currentTpl.label} Template</span>
                       <button onClick={() => setTaskActiveMode('template')} style={{ marginLeft: 'auto', fontSize: '10px', background: 'none', border: '1px solid var(--line)', color: 'var(--fog)', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer' }}>Change</button>
                     </div>
                   )}
@@ -3264,7 +3264,7 @@ const Dashboard = () => {
                             {taskSelectedLeadIds.map(lid => {
                               const l = leads.find(x => x.leadId === lid);
                               return l ? (
-                                <span key={lid} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc', padding: '3px 8px', borderRadius: '20px', fontSize: '11px', fontFamily: "'DM Mono', monospace" }}>
+                                <span key={lid} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc', padding: '3px 8px', borderRadius: '20px', fontSize: '11px',  }}>
                                   {l.company}
                                   <button type="button" onClick={() => setTaskSelectedLeadIds(ids => ids.filter(i => i !== lid))} style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: '0 2px', fontSize: '13px', lineHeight: 1 }}>×</button>
                                 </span>
@@ -3275,7 +3275,7 @@ const Dashboard = () => {
                         {/* Lead results list */}
                         <div style={{ background: 'var(--ink3)', border: '1px solid var(--line)', borderRadius: '8px', maxHeight: '180px', overflowY: 'auto' }}>
                           {filteredTaskLeads.length === 0 ? (
-                            <div style={{ padding: '12px', color: 'var(--fog)', fontSize: '12px', textAlign: 'center', fontFamily: "'DM Mono', monospace" }}>No leads match</div>
+                            <div style={{ padding: '12px', color: 'var(--fog)', fontSize: '12px', textAlign: 'center',  }}>No leads match</div>
                           ) : filteredTaskLeads.map(l => {
                             const isSel = taskSelectedLeadIds.includes(l.leadId);
                             return (
@@ -3308,7 +3308,7 @@ const Dashboard = () => {
                             );
                           })}
                         </div>
-                        <p style={{ fontSize: '10px', color: 'var(--fog)', fontFamily: "'DM Mono', monospace", margin: 0 }}>Click rows to select/deselect multiple leads</p>
+                        <p style={{ fontSize: '10px', color: 'var(--fog)',  margin: 0 }}>Click rows to select/deselect multiple leads</p>
                       </div>
 
                       {/* USER PICKER */}
@@ -3332,7 +3332,7 @@ const Dashboard = () => {
                             {selectedAssigneeIds.map(uid => {
                               const u = crmUsers.find(x => x.id === uid);
                               return u ? (
-                                <span key={uid} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.25)', color: '#4ade80', padding: '3px 8px', borderRadius: '20px', fontSize: '11px', fontFamily: "'DM Mono', monospace" }}>
+                                <span key={uid} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.25)', color: '#4ade80', padding: '3px 8px', borderRadius: '20px', fontSize: '11px',  }}>
                                   {u.first_name} {u.last_name}
                                   <button type="button" onClick={() => setSelectedAssigneeIds(ids => ids.filter(i => i !== uid))} style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: '0 2px', fontSize: '13px', lineHeight: 1 }}>×</button>
                                 </span>
@@ -3343,7 +3343,7 @@ const Dashboard = () => {
                         {/* User results list */}
                         <div style={{ background: 'var(--ink3)', border: '1px solid var(--line)', borderRadius: '8px', maxHeight: '180px', overflowY: 'auto' }}>
                           {filteredTaskUsers.length === 0 ? (
-                            <div style={{ padding: '12px', color: 'var(--fog)', fontSize: '12px', textAlign: 'center', fontFamily: "'DM Mono', monospace" }}>No users match</div>
+                            <div style={{ padding: '12px', color: 'var(--fog)', fontSize: '12px', textAlign: 'center',  }}>No users match</div>
                           ) : filteredTaskUsers.map(u => {
                             const isSel = selectedAssigneeIds.includes(u.id);
                             return (
@@ -3366,7 +3366,7 @@ const Dashboard = () => {
                               >
                                 <div>
                                   <span style={{ color: isSel ? '#4ade80' : 'var(--cream)', fontWeight: '600' }}>{u.first_name} {u.last_name}</span>
-                                  <span style={{ color: 'var(--fog)', marginLeft: '8px', fontSize: '10px', fontFamily: "'DM Mono', monospace" }}>{u.email}</span>
+                                  <span style={{ color: 'var(--fog)', marginLeft: '8px', fontSize: '10px',  }}>{u.email}</span>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   <span style={{ fontSize: '10px', color: 'var(--fog)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{u.role || 'user'}</span>
@@ -3376,7 +3376,7 @@ const Dashboard = () => {
                             );
                           })}
                         </div>
-                        <p style={{ fontSize: '10px', color: 'var(--fog)', fontFamily: "'DM Mono', monospace", margin: 0 }}>Click rows to select/deselect team members</p>
+                        <p style={{ fontSize: '10px', color: 'var(--fog)',  margin: 0 }}>Click rows to select/deselect team members</p>
                       </div>
                     </div>
 
@@ -3395,7 +3395,7 @@ const Dashboard = () => {
                           style={{ flex: 1, padding: '9px 12px', fontSize: '12px' }}
                         />
                         <button type="button" onClick={() => { if (newMilestoneText.trim()) { setMilestonesList(m => [...m, newMilestoneText.trim()]); setNewMilestoneText(''); } }}
-                          style={{ padding: '9px 18px', background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.35)', color: '#c084fc', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontFamily: "'DM Mono', monospace" }}>
+                          style={{ padding: '9px 18px', background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.35)', color: '#c084fc', borderRadius: '8px', cursor: 'pointer', fontSize: '12px',  }}>
                           + Add
                         </button>
                       </div>
@@ -3403,8 +3403,8 @@ const Dashboard = () => {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', padding: '10px', background: 'var(--ink4)', border: '1px solid var(--line)', borderRadius: '8px' }}>
                           {milestonesList.map((m, idx) => (
                             <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--cream)', padding: '5px 8px', background: 'rgba(255,255,255,0.02)', borderRadius: '4px' }}>
-                              <span style={{ color: 'var(--fog)', fontFamily: "'DM Mono', monospace", minWidth: '18px' }}>{idx + 1}.</span>
-                              <span style={{ flex: 1, fontFamily: "'DM Mono', monospace" }}>{m}</span>
+                              <span style={{ color: 'var(--fog)',  minWidth: '18px' }}>{idx + 1}.</span>
+                              <span style={{ flex: 1,  }}>{m}</span>
                               <button type="button" onClick={() => setMilestonesList(milestonesList.filter((_, i) => i !== idx))}
                                 style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: '0 4px' }}>×</button>
                             </div>
@@ -3439,7 +3439,7 @@ const Dashboard = () => {
                         </div>
                         <div className="kanban-col-body">
                           {colTasks.length === 0 && (
-                            <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--fog)', fontSize: '12px', fontFamily: "'DM Mono', monospace" }}>
+                            <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--fog)', fontSize: '12px',  }}>
                               No tasks here
                             </div>
                           )}
@@ -3461,11 +3461,11 @@ const Dashboard = () => {
                                     <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: pm.dot, marginRight: '4px' }}></span>
                                     {task.priority}
                                   </span>
-                                  {isOverdue && <span style={{ fontSize: '10px', color: '#f43f5e', fontFamily: "'DM Mono', monospace" }}>OVERDUE</span>}
+                                  {isOverdue && <span style={{ fontSize: '10px', color: '#f43f5e',  }}>OVERDUE</span>}
                                 </div>
                                 <p className="task-card-title" style={{ color: 'var(--cream)', fontWeight: '600' }}>{task.title}</p>
                                 {task.team_name && (
-                                  <div style={{ fontSize: '10px', color: 'var(--gold)', fontFamily: "'DM Mono', monospace", marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  <div style={{ fontSize: '10px', color: 'var(--gold)',  marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                                     {task.team_name}
                                   </div>
@@ -3491,7 +3491,7 @@ const Dashboard = () => {
                                     </span>
                                   )}
                                   {task.due_date && (
-                                    <span style={{ color: isOverdue ? '#f43f5e' : 'var(--fog)', fontSize: '11px', fontFamily: "'DM Mono', monospace" }}>
+                                    <span style={{ color: isOverdue ? '#f43f5e' : 'var(--fog)', fontSize: '11px',  }}>
                                       Due: {new Date(task.due_date).toLocaleDateString()}
                                     </span>
                                   )}
@@ -3536,7 +3536,7 @@ const Dashboard = () => {
             <div className="crm-timeline-panel">
               <div className="crm-timeline-header">
                 <div>
-                  <p style={{ color: 'var(--fog)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px', fontFamily: "'DM Mono', monospace" }}>Activity Timeline</p>
+                  <p style={{ color: 'var(--fog)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px',  }}>Activity Timeline</p>
                   <h3 style={{ color: 'var(--cream)', fontSize: '16px', margin: 0 }}>{activeLeadTimeline.company}</h3>
                 </div>
                 <button
@@ -3549,7 +3549,7 @@ const Dashboard = () => {
 
               <div className="crm-timeline-body">
                 {timelineLogs.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--fog)', fontSize: '13px', fontFamily: "'DM Mono', monospace" }}>
+                  <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--fog)', fontSize: '13px',  }}>
                     No activity recorded yet.
                     <br />
                     <span style={{ fontSize: '11px', opacity: 0.6 }}>Assign this lead or add a note below.</span>
@@ -3606,7 +3606,7 @@ const Dashboard = () => {
                           <div className="timeline-content">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
                               <span className="timeline-action-type" style={{ color: meta.color }}>{log.action_type}</span>
-                              <span style={{ color: 'var(--fog)', fontSize: '10px', fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap', marginLeft: '8px' }}>
+                              <span style={{ color: 'var(--fog)', fontSize: '10px',  whiteSpace: 'nowrap', marginLeft: '8px' }}>
                                 {new Date(log.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                               </span>
                             </div>
@@ -3620,7 +3620,7 @@ const Dashboard = () => {
               </div>
 
               <div className="crm-timeline-footer">
-                <p style={{ color: 'var(--fog)', fontSize: '11px', marginBottom: '10px', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.06em' }}>Add Progress Note</p>
+                <p style={{ color: 'var(--fog)', fontSize: '11px', marginBottom: '10px',  textTransform: 'uppercase', letterSpacing: '0.06em' }}>Add Progress Note</p>
                 <form onSubmit={handlePostActivityNote} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <textarea
                     className="finder-input"
@@ -3658,7 +3658,7 @@ const Dashboard = () => {
             <div className="db-content-area" style={{ padding: '24px' }}>
               <div className="db-crm-card" style={{ marginBottom: '20px', padding: '20px 24px' }}>
                 <span className="db-card-title" style={{ fontSize: '15px' }}>My Assigned Tasks</span>
-                <p style={{ color: 'var(--fog)', fontSize: '12px', marginTop: '4px', fontFamily: "'DM Mono', monospace" }}>
+                <p style={{ color: 'var(--fog)', fontSize: '12px', marginTop: '4px',  }}>
                   Below are the tasks currently assigned to you. Click any task to open its interactive milestone tracker and comments updates.
                 </p>
               </div>
@@ -3674,7 +3674,7 @@ const Dashboard = () => {
                       </div>
                       <div className="kanban-col-body">
                         {colTasks.length === 0 && (
-                          <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--fog)', fontSize: '12px', fontFamily: "'DM Mono', monospace" }}>
+                          <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--fog)', fontSize: '12px',  }}>
                             No tasks in this stage
                           </div>
                         )}
@@ -3696,13 +3696,13 @@ const Dashboard = () => {
                                   {pm.icon} {task.priority}
                                 </span>
                                 {isOverdue && (
-                                  <span style={{ fontSize: '10px', color: '#f43f5e', fontFamily: "'DM Mono', monospace" }}>OVERDUE</span>
+                                  <span style={{ fontSize: '10px', color: '#f43f5e',  }}>OVERDUE</span>
                                 )}
                               </div>
                               <p className="task-card-title" style={{ color: 'var(--cream)', fontWeight: '600' }}>{task.title}</p>
                               
                               {task.team_name && (
-                                <div style={{ fontSize: '10px', color: 'var(--gold)', fontFamily: "'DM Mono', monospace", marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <div style={{ fontSize: '10px', color: 'var(--gold)',  marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                                   Team: {task.team_name}
                                 </div>
@@ -3733,7 +3733,7 @@ const Dashboard = () => {
                                   </span>
                                 )}
                                 {task.due_date && (
-                                  <span style={{ color: isOverdue ? '#f43f5e' : 'var(--fog)', fontSize: '11px', fontFamily: "'DM Mono', monospace" }}>
+                                  <span style={{ color: isOverdue ? '#f43f5e' : 'var(--fog)', fontSize: '11px',  }}>
                                     Due: {new Date(task.due_date).toLocaleDateString()}
                                   </span>
                                 )}
@@ -3823,23 +3823,23 @@ const Dashboard = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', borderTop: '1px solid var(--line)', paddingTop: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--line2)', paddingBottom: '12px' }}>
                   <span style={{ color: 'var(--fog)', fontSize: '12px' }}>First Name</span>
-                  <span style={{ color: 'var(--cream)', fontSize: '12px', fontFamily: "'DM Mono', monospace" }}>{user?.firstName || 'Satish'}</span>
+                  <span style={{ color: 'var(--cream)', fontSize: '12px',  }}>{user?.firstName || 'Satish'}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--line2)', paddingBottom: '12px' }}>
                   <span style={{ color: 'var(--fog)', fontSize: '12px' }}>Last Name</span>
-                  <span style={{ color: 'var(--cream)', fontSize: '12px', fontFamily: "'DM Mono', monospace" }}>{user?.lastName || 'Verma'}</span>
+                  <span style={{ color: 'var(--cream)', fontSize: '12px',  }}>{user?.lastName || 'Verma'}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--line2)', paddingBottom: '12px' }}>
                   <span style={{ color: 'var(--fog)', fontSize: '12px' }}>Email Address</span>
-                  <span style={{ color: 'var(--cream)', fontSize: '12px', fontFamily: "'DM Mono', monospace" }}>{user?.email || 'admin@lead.ai'}</span>
+                  <span style={{ color: 'var(--cream)', fontSize: '12px',  }}>{user?.email || 'admin@lead.ai'}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--line2)', paddingBottom: '12px' }}>
                   <span style={{ color: 'var(--fog)', fontSize: '12px' }}>Company</span>
-                  <span style={{ color: 'var(--cream)', fontSize: '12px', fontFamily: "'DM Mono', monospace" }}>{user?.company || 'Freelance Agency'}</span>
+                  <span style={{ color: 'var(--cream)', fontSize: '12px',  }}>{user?.company || 'Freelance Agency'}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--line2)', paddingBottom: '12px' }}>
                   <span style={{ color: 'var(--fog)', fontSize: '12px' }}>Account Role</span>
-                  <span style={{ color: 'var(--gold)', fontSize: '12px', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase' }}>{user?.role || 'user'}</span>
+                  <span style={{ color: 'var(--gold)', fontSize: '12px',  textTransform: 'uppercase' }}>{user?.role || 'user'}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '12px' }}>
                   <span style={{ color: 'var(--fog)', fontSize: '12px' }}>Account Status</span>
