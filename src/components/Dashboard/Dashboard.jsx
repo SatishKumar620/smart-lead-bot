@@ -515,7 +515,7 @@ const Dashboard = () => {
 
           const popupContent = `
             <div class="map-popup-inner" style="min-width: 150px;">
-              <strong style="color: var(--cream); font-size: 13px; font-family: 'Outfit', sans-serif; letter-spacing: 0.05em; display: block; margin-bottom: 4px;">${lead.company}</strong>
+              <strong style="color: var(--cream); font-size: 13px; font-family: 'Inter', sans-serif; letter-spacing: 0.05em; display: block; margin-bottom: 4px;">${lead.company}</strong>
               <div style="color: var(--mist); font-size: 10px; margin-bottom: 2px;"><strong>Location:</strong> ${lead.location}</div>
               <div style="color: var(--mist); font-size: 10px; margin-bottom: 2px;"><strong>Industry:</strong> ${lead.industry}</div>
               <div style="color: var(--gold); font-size: 10px; margin-bottom: 4px;"><strong>AI Grade:</strong> ${lead.ai_grade} (${lead.ai_score}/10)</div>
@@ -1279,7 +1279,7 @@ const Dashboard = () => {
         labels: {
           color: '#f5f0eb',
           font: {
-            family: 'Outfit',
+            family: 'Inter',
             size: 10,
             weight: '500'
           },
@@ -1291,8 +1291,8 @@ const Dashboard = () => {
       },
       tooltip: {
         backgroundColor: 'rgba(12, 14, 18, 0.95)',
-        titleFont: { family: 'Outfit', size: 11, weight: 'bold' },
-        bodyFont: { family: 'Outfit', size: 10 },
+        titleFont: { family: 'Inter', size: 11, weight: 'bold' },
+        bodyFont: { family: 'Inter', size: 10 },
         borderColor: '#a855f7',
         borderWidth: 1,
         padding: 10,
@@ -1352,8 +1352,8 @@ const Dashboard = () => {
       },
       tooltip: {
         backgroundColor: 'rgba(12, 14, 18, 0.95)',
-        titleFont: { family: 'Outfit', size: 11, weight: 'bold' },
-        bodyFont: { family: 'Outfit', size: 10 },
+        titleFont: { family: 'Inter', size: 11, weight: 'bold' },
+        bodyFont: { family: 'Inter', size: 10 },
         borderColor: '#06b6d4',
         borderWidth: 1,
         padding: 10,
@@ -1368,7 +1368,7 @@ const Dashboard = () => {
         ticks: {
           color: '#8e9dae',
           font: {
-            family: 'Outfit',
+            family: 'Inter',
             size: 10,
             weight: '500'
           }
@@ -1381,7 +1381,7 @@ const Dashboard = () => {
         ticks: {
           color: '#8e9dae',
           font: {
-            family: 'Outfit',
+            family: 'Inter',
             size: 10,
             weight: '500'
           },
@@ -1441,8 +1441,8 @@ const Dashboard = () => {
       },
       tooltip: {
         backgroundColor: 'rgba(12, 14, 18, 0.95)',
-        titleFont: { family: 'Outfit', size: 11, weight: 'bold' },
-        bodyFont: { family: 'Outfit', size: 10 },
+        titleFont: { family: 'Inter', size: 11, weight: 'bold' },
+        bodyFont: { family: 'Inter', size: 10 },
         borderColor: '#a855f7',
         borderWidth: 1,
         padding: 10,
@@ -1457,7 +1457,7 @@ const Dashboard = () => {
         ticks: {
           color: '#8e9dae',
           font: {
-            family: 'Outfit',
+            family: 'Inter',
             size: 10,
             weight: '500'
           },
@@ -1471,7 +1471,7 @@ const Dashboard = () => {
         ticks: {
           color: '#f5f0eb',
           font: {
-            family: 'Outfit',
+            family: 'Inter',
             size: 10,
             weight: '500'
           }
@@ -3163,7 +3163,7 @@ const Dashboard = () => {
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
                           <span style={{ color: tpl.color }}>{tpl.icon}</span>
-                          <span style={{ color: tpl.color, fontWeight: '700', fontSize: '13px', fontFamily: "'Outfit', sans-serif" }}>{tpl.label}</span>
+                          <span style={{ color: tpl.color, fontWeight: '700', fontSize: '13px', fontFamily: "'Manrope', sans-serif" }}>{tpl.label}</span>
                         </div>
                         <p style={{ color: 'var(--mist)', fontSize: '12px', lineHeight: '1.6', margin: 0 }}>{tpl.description}</p>
                         {tpl.defaults && (
@@ -3806,13 +3806,13 @@ const Dashboard = () => {
                   fontSize: '32px',
                   margin: '0 auto 16px',
                   color: 'var(--ink)',
-                  fontFamily: "'Outfit', sans-serif"
+                  fontFamily: "'Manrope', sans-serif"
                 }}>
                   {user?.firstName?.charAt(0).toUpperCase() || (
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                   )}
                 </div>
-                <h2 style={{ fontFamily: "'Outfit', sans-serif", fontSize: '28px', color: 'var(--cream)', margin: '0 0 4px 0', letterSpacing: '0.04em' }}>
+                <h2 style={{ fontFamily: "'Manrope', sans-serif", fontSize: '28px', color: 'var(--cream)', margin: '0 0 4px 0', letterSpacing: '0.04em' }}>
                   {user ? `${user.firstName} ${user.lastName}` : 'Administrator Profile'}
                 </h2>
                 <span style={{ fontSize: '11px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
@@ -3862,7 +3862,7 @@ const Dashboard = () => {
                   background: 'transparent',
                   border: '1px solid #ef4444',
                   color: '#ef4444',
-                  fontFamily: "'Outfit', sans-serif",
+                  fontFamily: "'Manrope', sans-serif",
                   fontSize: '15px',
                   letterSpacing: '0.1em',
                   cursor: 'pointer',

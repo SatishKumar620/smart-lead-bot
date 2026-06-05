@@ -589,7 +589,7 @@ const Home = () => {
       {/* SCORING GRADES */}
       <section className="grades" id="scoring">
         <p className="sec-tag">AI Lead Scoring</p>
-        <h2 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 900, fontSize: 'clamp(32px, 4.5vw, 54px)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>Three grades.<br/>One decision per lead.</h2>
+        <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: 'clamp(32px, 4.5vw, 54px)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>Three grades.<br/>One decision per lead.</h2>
         <div className="gcard-grid">
           <div className="gcard hot">
             <span className="g-emoji">

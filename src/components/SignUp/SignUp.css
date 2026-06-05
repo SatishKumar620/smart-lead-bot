@@ -50,7 +50,7 @@
 }
 
 .logo {
-  font-family: 'Outfit', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  font-family: 'Manrope', sans-serif; font-weight: 800; letter-spacing: -0.02em;
   font-size: 21px;
   letter-spacing: .14em;
   display: flex;
@@ -102,7 +102,7 @@
 }
 
 .l-title {
-  font-family: 'Outfit', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  font-family: 'Manrope', sans-serif; font-weight: 800; letter-spacing: -0.02em;
   font-size: clamp(50px, 5.5vw, 82px);
   line-height: .92;
   letter-spacing: .01em;
@@ -110,7 +110,7 @@
 }
 
 .l-title em {
-  font-family: 'Outfit', sans-serif; font-style: normal; font-weight: 700;
+  font-family: 'Manrope', sans-serif; font-style: normal; font-weight: 700;
   font-style: italic;
   font-weight: 700;
   color: var(--gold);
@@ -226,7 +226,7 @@
 }
 
 .form-title {
-  font-family: 'Outfit', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  font-family: 'Manrope', sans-serif; font-weight: 800; letter-spacing: -0.02em;
   font-size: 36px;
   letter-spacing: .02em;
   line-height: .95;
@@ -484,7 +484,7 @@
 
 /* Submit button */
 .btn-submit {
-  font-family: 'Outfit', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  font-family: 'Manrope', sans-serif; font-weight: 800; letter-spacing: -0.02em;
   font-size: 15px;
   letter-spacing: .14em;
   padding: 15px 32px;

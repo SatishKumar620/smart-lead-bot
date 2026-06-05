@@ -24,7 +24,7 @@
 }
 
 .db-logo {
-  font-family: 'Outfit', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  font-family: 'Manrope', sans-serif; font-weight: 800; letter-spacing: -0.02em;
   font-size: 24px;
   letter-spacing: .12em;
   color: var(--cream);
@@ -112,7 +112,7 @@
 }
 
 .db-title-wrap h1 {
-  font-family: 'Outfit', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  font-family: 'Manrope', sans-serif; font-weight: 800; letter-spacing: -0.02em;
   font-size: 40px;
   letter-spacing: .02em;
   line-height: 1;
@@ -170,7 +170,7 @@
 }
 
 .db-stat-val {
-  font-family: 'Outfit', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  font-family: 'Manrope', sans-serif; font-weight: 800; letter-spacing: -0.02em;
   font-size: 36px;
   line-height: 1;
   color: var(--gold);
@@ -225,7 +225,7 @@
 }
 
 .db-card-title {
-  font-family: 'Outfit', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  font-family: 'Manrope', sans-serif; font-weight: 800; letter-spacing: -0.02em;
   font-size: 20px;
   letter-spacing: .08em;
   color: var(--cream);
@@ -653,7 +653,7 @@
   border: none;
   color: var(--ink);
   padding: 0 28px;
-  font-family: 'Outfit', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  font-family: 'Manrope', sans-serif; font-weight: 800; letter-spacing: -0.02em;
   font-size: 15px;
   letter-spacing: .12em;
   cursor: none;
@@ -715,7 +715,7 @@
 }
 
 .n8n-node-name {
-  font-family: 'Outfit', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  font-family: 'Manrope', sans-serif; font-weight: 800; letter-spacing: -0.02em;
   font-size: 11px;
   letter-spacing: .08em;
   color: var(--fog);
@@ -911,7 +911,7 @@
 
 /* Custom Score Indicators */
 .score-badge {
-  font-family: 'Outfit', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  font-family: 'Manrope', sans-serif; font-weight: 800; letter-spacing: -0.02em;
   font-size: 14px;
   display: inline-flex;
   align-items: center;
@@ -1298,7 +1298,7 @@ body:has(.db-map-wrapper:hover) #cr {
 }
 
 .analysis-mini-val {
-  font-family: 'Outfit', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  font-family: 'Manrope', sans-serif; font-weight: 800; letter-spacing: -0.02em;
   font-size: 28px;
   color: var(--gold);
   line-height: 1.1;
@@ -1717,7 +1717,7 @@ body:has(.db-map-wrapper:hover) #cr {
 }
 
 .db-loading-logo {
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Manrope', sans-serif;
   font-size: 28px;
   font-weight: 800;
   color: var(--cream);

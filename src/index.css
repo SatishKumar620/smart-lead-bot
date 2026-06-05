@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800;900&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Manrope:wght@300;400;500;600;700;800;900&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
 
 :root {
   --ink: #05050a;
@@ -93,7 +93,8 @@ html {
 body {
   background: var(--ink);
   color: var(--cream);
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Inter', sans-serif;
+  font-weight: 400;
   overflow-x: hidden;
   min-height: 100%;
   cursor: none;
@@ -219,6 +220,24 @@ body:has(select:focus) #cd {
 html.light-theme #grain {
   mix-blend-mode: multiply;
   opacity: 0.045;
+}
+
+/* Headings: Manrope 800 */
+h1, h2, h3, h4, h5, h6,
+.h-title, .pl-title, .bento-title, .an-title, .rp-title, .img-strip-title, .setup-title, .step-title,
+.db-card-title, .bcard-title, .sec-tag, .g-title, .step-n, .cta-title, .faq-q, .fnode-name,
+.auth-title, .task-title, .det-title, .sub-section-title, .nav-logo {
+  font-family: 'Manrope', sans-serif !important;
+  font-weight: 800 !important;
+}
+
+/* Cards: Inter 500 */
+.gcard, .bcard, .db-stat-card, .db-map-card, .db-chatbot-card, .db-finder-card, 
+.db-crm-card, .db-chart-card, .nlp-console-card, .analysis-mini-card, 
+.opportunity-gaps-card, .task-card, .db-card, .card, .tcard, .detail-card,
+.milestone-item, .lead-picker, .user-picker, .auth-card {
+  font-family: 'Inter', sans-serif !important;
+  font-weight: 500 !important;
 }
 
 /* Force specific components (like terminal, database listings, stats) to retain DM Mono font */
