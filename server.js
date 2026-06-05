@@ -1292,7 +1292,7 @@ app.post('/api/find-leads', async (req, res) => {
     // 5. Scrape, enrich, score, and store leads asynchronously in background
     const processLeadsAsync = async () => {
       console.log(`Starting enrichment for ${finalLeads.length} leads...`);
-      for (const item of finalLeads) {
+      const enrichmentPromises = finalLeads.map(async (item) => {
         let bestEmail = '';
         let bestPhone = item.phone || '';
         let websiteText = '';
@@ -1427,7 +1427,9 @@ app.post('/api/find-leads', async (req, res) => {
         } catch (dbErr) {
           console.error('Failed to store enriched lead in DB:', dbErr.message);
         }
-      }
+      });
+      
+      await Promise.all(enrichmentPromises);
       console.log(`Enrichment complete for ${finalLeads.length} leads.`);
     };
     

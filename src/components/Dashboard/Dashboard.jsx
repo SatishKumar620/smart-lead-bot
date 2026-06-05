@@ -1020,106 +1020,15 @@ const Dashboard = () => {
       }
 
     } catch (err) {
-      console.warn("n8n Webhook connection failed, running graceful local fallback simulation:", err.message);
+      console.error("n8n Webhook connection failed:", err.message);
       clearInterval(progressInterval);
+      setN8nTimelineActive(false);
       
-      // Local regex parsing ONLY as a resilient fallback
-      const inRegex = /\s+(in|from|at|around)\s+([a-zA-Z\s]+)/i;
-      const match = queryText.match(inRegex);
-      let fallbackCity = "Bangalore";
-      let fallbackNiche = queryText;
-      if (match) {
-        fallbackCity = match[2].trim();
-        fallbackNiche = queryText.replace(inRegex, "").replace(/find|search|get|leads|for|show|me/gi, "").trim();
-      } else {
-        fallbackNiche = queryText.replace(/find|search|get|leads|for|show|me/gi, "").trim();
-      }
-      
-      fallbackCity = fallbackCity.charAt(0).toUpperCase() + fallbackCity.slice(1);
-      fallbackNiche = fallbackNiche.charAt(0).toUpperCase() + fallbackNiche.slice(1);
-      
-      setCurrentNiche(fallbackNiche);
-      setCurrentCity(fallbackCity);
-
-      // Fast fallback simulation to ensure visual metrics show up
-      setN8nSecondsRemaining(3);
-      setN8nProgressPercentage(10);
-      
-      let simSeconds = 3;
-      const simInterval = setInterval(async () => {
-        simSeconds--;
-        setN8nSecondsRemaining(simSeconds);
-        setN8nProgressPercentage(Math.round(((3 - simSeconds) / 3) * 100));
-        
-        const curIdx = Math.min(Math.floor((3 - simSeconds) * 3), 8);
-        setN8nTimelineSteps(prev => prev.map((step, idx) => {
-          if (idx === curIdx) return { ...step, status: 'Processing...' };
-          if (idx < curIdx) return { ...step, status: 'Completed' };
-          return { ...step, status: 'Standby' };
-        }));
-
-        if (simSeconds <= 0) {
-          clearInterval(simInterval);
-          setN8nTimelineSteps(prev => prev.map(s => ({ ...s, status: 'Completed' })));
-          setN8nProgressPercentage(100);
-          
-          let coordinates = { lat: 12.9716, lng: 77.5946 };
-          if (fallbackCity.toLowerCase().includes('mumbai')) coordinates = { lat: 19.0760, lng: 72.8777 };
-          else if (fallbackCity.toLowerCase().includes('delhi')) coordinates = { lat: 28.7041, lng: 77.1025 };
-          else if (fallbackCity.toLowerCase().includes('london')) coordinates = { lat: 51.5074, lng: -0.1278 };
-          else if (fallbackCity.toLowerCase().includes('west bengal')) coordinates = { lat: 22.9868, lng: 87.8550 };
-
-          const fallbackLeads = [];
-          for (let i = 0; i < leadsLimit; i++) {
-            const num = i + 1;
-            const grades = ['Hot', 'Warm', 'Cold'];
-            const grade = i === 0 ? 'Hot' : grades[Math.floor((i * 13) % 3)];
-            const score = grade === 'Hot' ? 8 + (i % 3) : (grade === 'Warm' ? 5 + (i % 3) : 2 + (i % 2));
-            const companyName = i === 0 ? `${fallbackNiche} Enterprises` : (i === 1 ? `Modern ${fallbackNiche} Hub` : `Apex ${fallbackNiche} Co #${num}`);
-            const budget = i % 3 === 0 ? 'High' : (i % 3 === 1 ? 'Medium' : 'Low');
-            const dealValue = i % 3 === 0 ? '$15k-$30k' : (i % 3 === 1 ? '$5k-$8k' : '$1k-$3k');
-            
-            fallbackLeads.push({
-              leadId: `LEAD-SIM-${num}-${Date.now()}`,
-              timestamp: new Date().toISOString(),
-              company: companyName,
-              website: i % 2 === 0 ? `https://${companyName.toLowerCase().replace(/[^a-z]/g, '') || 'company'}.in` : '',
-              phone: `+91 9${String(Math.floor(100000000 + Math.random() * 900000000))}`,
-              email: i % 2 === 0 ? `sales@${companyName.toLowerCase().replace(/[^a-z]/g, '') || 'company'}.in` : '',
-              has_website: i % 2 === 0,
-              has_phone: true,
-              industry: fallbackNiche,
-              location: fallbackCity,
-              source: 'n8n Simulation Fallback',
-              ai_score: score,
-              ai_grade: grade,
-              ai_intent: `Generated locally for query: "${queryText}". n8n workflow active, but fell back to high-fidelity simulation.`,
-              ai_budget_signal: budget,
-              ai_urgency: grade === 'Hot' ? 'Immediate' : (grade === 'Warm' ? 'Soon' : 'Exploring'),
-              ai_estimated_deal_value: dealValue,
-              ai_sentiment: grade === 'Hot' ? 'Positive' : 'Neutral',
-              ai_revenue_potential: budget,
-              ai_risk_flags: 'None',
-              status: 'New',
-              next_followup: new Date(Date.now() + (172800000 * num)).toISOString().split('T')[0],
-              ai_recommended_action: grade === 'Hot' ? 'Initiate outreach.' : 'Send portfolio.',
-              lat: coordinates.lat + (Math.sin(i) * 0.005),
-              lng: coordinates.lng + (Math.cos(i) * 0.005)
-            });
-          }
-
-          setLeads(prev => [...fallbackLeads, ...prev]);
-          setCurrentQueryLeads(fallbackLeads);
-          setN8nTimelineActive(false);
-          setNlpSearchVal('');
-          
-          setChatMessages(prev => [...prev, {
-            id: Date.now(),
-            type: 'bot',
-            text: `⚠️ Lead successfully generated matching "${queryText}" and registered in system database! Note: The n8n workflow executed, but used simulation fallback for final enrichment because credentials (e.g. Google Maps or Groq keys) are not fully configured in your n8n workspace.`
-          }]);
-        }
-      }, 1000);
+      setChatMessages(prev => [...prev, {
+        id: Date.now(),
+        type: 'bot',
+        text: `❌ Error executing search pipeline: ${err.message || 'Workflow connection offline'}. Please ensure the backend services are online and try again.`
+      }]);
     }
   };
   // Chatbot question submission (Real RAG query over PostgreSQL database and Groq)
@@ -1546,35 +1455,33 @@ const Dashboard = () => {
               </svg>
               lead.ai
             </Link>
-          </div>
-          <div className="db-nav">
-            <button className={`db-nav-item ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>
+                  <button className={`db-nav-item ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>
               <NavIcon name="dashboard" />
-              Overview
+              Insights Hub
             </button>
             <button className={`db-nav-item ${activeTab === 'map' ? 'active' : ''}`} onClick={() => setActiveTab('map')}>
               <NavIcon name="map" />
-              Lead Map
+              Geo-Intelligence
             </button>
             <button className={`db-nav-item ${activeTab === 'bot' ? 'active' : ''}`} onClick={() => setActiveTab('bot')}>
               <NavIcon name="bot" />
-              RAG Bot
+              AI Sales Copilot
             </button>
             <button className={`db-nav-item ${activeTab === 'nlp-console' ? 'active' : ''}`} onClick={() => setActiveTab('nlp-console')}>
               <NavIcon name="search" />
-              NLP Console
+              AI Prospector
             </button>
             {userRole === 'admin' && (
               <>
                 <button className={`db-nav-item ${activeTab === 'manage' ? 'active' : ''}`} onClick={() => setActiveTab('manage')}>
                   <NavIcon name="manage" />
-                  Manage Leads
+                  Lead Directory
                 </button>
                 <button className={`db-nav-item ${activeTab === 'tasks' ? 'active' : ''}`} onClick={() => setActiveTab('tasks')}>
                   <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
                   </svg>
-                  Task Board
+                  Operations Board
                 </button>
               </>
             )}
@@ -1583,7 +1490,7 @@ const Dashboard = () => {
                 <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9l2 2 4-4"/>
                 </svg>
-                Assigned Tasks
+                My Tasks
               </button>
             )}
             <button className={`db-nav-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
@@ -1591,7 +1498,7 @@ const Dashboard = () => {
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
-              My Profile
+              Account Settings
             </button>
           </div>
         </div>
