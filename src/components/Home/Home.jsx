@@ -584,22 +584,7 @@ const Home = () => {
         </div>
       </section>
 
-      {/* WORKFLOW IMAGE SHOWCASE */}
-      <div className="workflow-img-section">
-        <div className="workflow-img-wrap" id="wfImg">
-          <img 
-            src="https://images.unsplash.com/photo-1607799279861-4dd421887fb3?auto=format&fit=crop&w=1200&q=80"
-            alt="n8n workflow canvas showing connected AI nodes"
-            loading="lazy"
-          />
-          <div className="workflow-img-overlay"></div>
-          <div className="workflow-img-caption">
-            <span className="wic-badge">n8n Canvas</span>
-            <span className="wic-badge">18 Connected Nodes</span>
-            <span className="wic-badge">GPT‑4o Mini</span>
-          </div>
-        </div>
-      </div>
+
 
       {/* SCORING GRADES */}
       <section className="grades" id="scoring">

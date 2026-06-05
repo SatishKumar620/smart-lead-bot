@@ -1391,16 +1391,16 @@ const Dashboard = () => {
     }
   };
 
-  // Bar: Industry breakdown counts — top 8 + 'Other'
+  // Bar: Industry breakdown counts — top 5 (4 + 'Other')
   const industryCounts = leads.reduce((acc, lead) => {
     acc[lead.industry] = (acc[lead.industry] || 0) + 1;
     return acc;
   }, {});
 
   const sortedAllIndustries = Object.keys(industryCounts).sort((a, b) => industryCounts[b] - industryCounts[a]);
-  const top8 = sortedAllIndustries.slice(0, 8);
-  const otherCount = sortedAllIndustries.slice(8).reduce((sum, ind) => sum + industryCounts[ind], 0);
-  const sortedIndustries = otherCount > 0 ? [...top8, 'Other'] : top8;
+  const top4 = sortedAllIndustries.slice(0, 4);
+  const otherCount = sortedAllIndustries.slice(4).reduce((sum, ind) => sum + industryCounts[ind], 0);
+  const sortedIndustries = otherCount > 0 ? [...top4, 'Other'] : sortedAllIndustries.slice(0, 5);
   const barValues = sortedIndustries.map(ind => ind === 'Other' ? otherCount : industryCounts[ind]);
 
   const barData = {
