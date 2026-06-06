@@ -75,6 +75,56 @@ const pool = new Pool({
   database: 'leads'
 })
 
+// Helper: Get fresh access token using refresh token if expired
+async function getFreshGoogleToken() {
+  const result = await pool.query("SELECT * FROM google_settings WHERE id = 'global'");
+  if (result.rows.length === 0 || !result.rows[0].access_token) {
+    throw new Error('Google integration not connected');
+  }
+  const row = result.rows[0];
+  const { client_id, client_secret, access_token, refresh_token, token_expiry } = row;
+  
+  if (token_expiry && new Date(token_expiry) > new Date(Date.now() + 60000)) {
+    return access_token;
+  }
+  
+  if (!refresh_token) {
+    throw new Error('Google access token expired and no refresh token available. Reconnect your account.');
+  }
+  
+  // Refresh token
+  const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id,
+      client_secret,
+      refresh_token,
+      grant_type: 'refresh_token'
+    })
+  });
+  
+  if (!refreshRes.ok) {
+    const errText = await refreshRes.text();
+    throw new Error(`Failed to refresh Google token: ${errText}`);
+  }
+  
+  const tokenData = await refreshRes.json();
+  const nextAccessToken = tokenData.access_token;
+  const expires_in = tokenData.expires_in || 3600;
+  const nextTokenExpiry = new Date(Date.now() + expires_in * 1000);
+  
+  await pool.query(`
+    UPDATE google_settings SET
+      access_token = $1,
+      token_expiry = $2
+    WHERE id = 'global'
+  `, [nextAccessToken, nextTokenExpiry]);
+  
+  return nextAccessToken;
+}
+
+
 // Ensure chat_memory table exists and bootstrap B2B CRM extensions
 pool.query(`
   CREATE TABLE IF NOT EXISTS chat_memory (
