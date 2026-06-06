@@ -287,10 +287,49 @@ const Dashboard = () => {
   const [overviewPage, setOverviewPage] = useState(1);
   const overviewPerPage = 5;
 
-  // Quick single-lead ingest state (dashboard manage tab)
-  const [quickIngestForm, setQuickIngestForm] = useState({ company: '', industry: '', location: '', website: '', phone: '', email: '' });
+  // ── Dynamic Quick Lead Ingest ──
+  // Core always-present fields (required=true cannot be removed)
+  const DEFAULT_INGEST_FIELDS = [
+    { key: 'company',  label: 'Company Name',  type: 'text',   required: true,  placeholder: 'Acme Corp' },
+    { key: 'industry', label: 'Industry',       type: 'text',   required: true,  placeholder: 'SaaS / Hotel / Restaurant' },
+    { key: 'location', label: 'City / Location',type: 'text',   required: true,  placeholder: 'Bangalore' },
+    { key: 'website',  label: 'Website',        type: 'url',    required: false, placeholder: 'https://acme.com' },
+    { key: 'phone',    label: 'Phone',          type: 'text',   required: false, placeholder: '+91 98765 43210' },
+    { key: 'email',    label: 'Email',          type: 'email',  required: false, placeholder: 'hello@acme.com' },
+  ];
+
+  // Field catalog — all possible fields admin can add
+  const FIELD_CATALOG = [
+    { key: 'contact_name',   label: 'Contact Name',      type: 'text',   placeholder: 'John Doe' },
+    { key: 'contact_title',  label: 'Contact Title',     type: 'text',   placeholder: 'CEO / Manager' },
+    { key: 'address',        label: 'Full Address',      type: 'text',   placeholder: '123 Main St, City' },
+    { key: 'whatsapp_number',label: 'WhatsApp Number',   type: 'text',   placeholder: '+91 98765 43210' },
+    { key: 'rating',         label: 'Rating (0-5)',      type: 'number', placeholder: '4.2' },
+    { key: 'ai_score',       label: 'AI Score (1-10)',   type: 'number', placeholder: '7' },
+    { key: 'status',         label: 'Status',            type: 'select', options: ['New','Contacted','In Progress','Closed'], placeholder: 'New' },
+    { key: 'next_followup',  label: 'Next Follow-up',    type: 'date',   placeholder: '' },
+    { key: 'source',         label: 'Lead Source',       type: 'text',   placeholder: 'Google / LinkedIn / Referral' },
+    { key: 'business_status',label: 'Business Status',   type: 'text',   placeholder: 'Operational' },
+    { key: 'opening_hours',  label: 'Opening Hours',     type: 'text',   placeholder: 'Mon-Sat 9am-6pm' },
+    { key: 'category',       label: 'Category',          type: 'text',   placeholder: 'Hotel / Restaurant / Clinic' },
+    { key: 'total_ratings',  label: 'Total Ratings',     type: 'number', placeholder: '320' },
+    { key: 'lat',            label: 'Latitude',          type: 'number', placeholder: '12.9716' },
+    { key: 'lng',            label: 'Longitude',         type: 'number', placeholder: '77.5946' },
+    { key: 'google_maps_url',label: 'Google Maps URL',   type: 'url',    placeholder: 'https://maps.google.com/...' },
+    { key: 'website_description', label: 'Website Description', type: 'text', placeholder: 'Short about the business' },
+  ];
+
+  const [ingestFields, setIngestFields] = useState(DEFAULT_INGEST_FIELDS);
+  const [ingestValues, setIngestValues] = useState({});
+  const [ingestStatus, setIngestStatus] = useState('');
+  const [ingestFieldPickerOpen, setIngestFieldPickerOpen] = useState(false);
+
+  // Legacy alias kept for any older references
+  const quickIngestForm = ingestValues;
+  const setQuickIngestForm = setIngestValues;
   const [quickIngestStatus, setQuickIngestStatus] = useState('');
   const [activeTooltip, setActiveTooltip] = useState(null);
+
 
   // n8n Search Pipeline State
   const [nlpSearchVal, setNlpSearchVal] = useState('');
@@ -2456,8 +2495,9 @@ const Dashboard = () => {
 
           const handleQuickIngestSubmit = async (e) => {
             e.preventDefault();
-            if (!quickIngestForm.company || !quickIngestForm.location || !quickIngestForm.industry) {
-              setQuickIngestStatus('Please fill all required fields.');
+            const missingRequired = ingestFields.filter(f => f.required && !ingestValues[f.key]);
+            if (missingRequired.length > 0) {
+              setQuickIngestStatus(`Please fill required fields: ${missingRequired.map(f => f.label).join(', ')}`);
               return;
             }
             setQuickIngestStatus('Ingesting...');
@@ -2465,11 +2505,11 @@ const Dashboard = () => {
               const res = await authenticatedFetch('/api/leads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...quickIngestForm, source: 'Dashboard Manual Ingest' })
+                body: JSON.stringify({ ...ingestValues, source: ingestValues.source || 'Dashboard Manual Ingest' })
               });
               if (res.ok) {
                 setQuickIngestStatus('Lead ingested successfully.');
-                setQuickIngestForm({ company: '', industry: '', location: '', website: '', phone: '', email: '' });
+                setIngestValues({});
                 setTimeout(() => setQuickIngestStatus(''), 2500);
 
                 // Refresh the leads state to update all dashboard tabs instantly
@@ -2489,80 +2529,148 @@ const Dashboard = () => {
 
           return (
             <>
-              {/* QUICK SINGLE LEAD INGEST */}
+              {/* QUICK SINGLE LEAD INGEST — DYNAMIC FIELDS */}
               <div className="nlp-console-card" style={{ marginBottom: '24px' }}>
                 <div className="db-card-title-wrap" style={{ marginBottom: '16px' }}>
                   <span className="db-card-title">Quick Lead Ingest</span>
-                  <span style={{ fontSize: '10px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Manual Single Record Entry — Admin Only</span>
+                  <span style={{ fontSize: '10px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Manual Single Record — Admin Only</span>
                 </div>
+
+                {/* Field manager toolbar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--fog)' }}>Active fields: <strong style={{ color: 'var(--cream)' }}>{ingestFields.length}</strong></span>
+                  <div style={{ marginLeft: 'auto', position: 'relative' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIngestFieldPickerOpen(o => !o)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', fontSize: '11px', background: 'rgba(232,150,42,0.1)', border: '1px solid rgba(232,150,42,0.35)', color: 'var(--gold)', borderRadius: '7px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      Add Field
+                    </button>
+                    {ingestFieldPickerOpen && (
+                      <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 200, background: 'var(--ink2)', border: '1px solid var(--line)', borderRadius: '10px', minWidth: '220px', boxShadow: '0 16px 40px rgba(0,0,0,0.4)', overflow: 'hidden' }}>
+                        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--line)', fontSize: '11px', color: 'var(--fog)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Pick a field to add</div>
+                        <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
+                          {FIELD_CATALOG.filter(fc => !ingestFields.find(f => f.key === fc.key)).map(fc => (
+                            <button
+                              key={fc.key}
+                              type="button"
+                              onClick={() => {
+                                setIngestFields(prev => [...prev, { ...fc, required: false }]);
+                                setIngestFieldPickerOpen(false);
+                              }}
+                              style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '2px', padding: '10px 14px', background: 'none', border: 'none', borderBottom: '1px solid var(--line)', cursor: 'pointer', textAlign: 'left' }}
+                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                            >
+                              <span style={{ fontSize: '12px', color: 'var(--cream)', fontWeight: 600 }}>{fc.label}</span>
+                              <span style={{ fontSize: '10px', color: 'var(--fog)' }}>{fc.type} · {fc.key}</span>
+                            </button>
+                          ))}
+                          {FIELD_CATALOG.filter(fc => !ingestFields.find(f => f.key === fc.key)).length === 0 && (
+                            <div style={{ padding: '16px 14px', fontSize: '12px', color: 'var(--fog)', textAlign: 'center' }}>All available fields already added.</div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIngestFieldPickerOpen(false)}
+                          style={{ width: '100%', padding: '8px', fontSize: '11px', background: 'none', border: 'none', borderTop: '1px solid var(--line)', color: 'var(--fog)', cursor: 'pointer' }}
+                        >Cancel</button>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setIngestFields(DEFAULT_INGEST_FIELDS); setIngestValues({}); }}
+                    style={{ padding: '6px 12px', fontSize: '11px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--fog)', borderRadius: '7px', cursor: 'pointer' }}
+                  >Reset</button>
+                </div>
+
+                {/* Dynamic form grid */}
                 <form onSubmit={handleQuickIngestSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Company Name *</label>
-                    <input className="finder-input" required placeholder="Acme Corp" value={quickIngestForm.company}
-                      onChange={e => setQuickIngestForm({ ...quickIngestForm, company: e.target.value })}
-                      style={{ padding: '9px 12px', fontSize: '12px' }} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Industry *</label>
-                    <input className="finder-input" required placeholder="SaaS" value={quickIngestForm.industry}
-                      onChange={e => setQuickIngestForm({ ...quickIngestForm, industry: e.target.value })}
-                      style={{ padding: '9px 12px', fontSize: '12px' }} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Location *</label>
-                    <input className="finder-input" required placeholder="San Francisco" value={quickIngestForm.location}
-                      onChange={e => setQuickIngestForm({ ...quickIngestForm, location: e.target.value })}
-                      style={{ padding: '9px 12px', fontSize: '12px' }} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Website</label>
-                    <input className="finder-input" placeholder="https://acme.com" value={quickIngestForm.website}
-                      onChange={e => setQuickIngestForm({ ...quickIngestForm, website: e.target.value })}
-                      style={{ padding: '9px 12px', fontSize: '12px' }} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Phone</label>
-                    <input className="finder-input" placeholder="+1 415 555 0100" value={quickIngestForm.phone}
-                      onChange={e => setQuickIngestForm({ ...quickIngestForm, phone: e.target.value })}
-                      style={{ padding: '9px 12px', fontSize: '12px' }} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Email</label>
-                    <input className="finder-input" type="email" placeholder="hello@acme.com" value={quickIngestForm.email}
-                      onChange={e => setQuickIngestForm({ ...quickIngestForm, email: e.target.value })}
-                      style={{ padding: '9px 12px', fontSize: '12px' }} />
-                  </div>
+                  {ingestFields.map(field => (
+                    <div key={field.key} style={{ display: 'flex', flexDirection: 'column', gap: '4px', position: 'relative' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>
+                          {field.label}{field.required ? ' *' : ''}
+                        </label>
+                        {!field.required && (
+                          <button
+                            type="button"
+                            title={`Remove ${field.label} field`}
+                            onClick={() => {
+                              setIngestFields(prev => prev.filter(f => f.key !== field.key));
+                              setIngestValues(prev => { const n = { ...prev }; delete n[field.key]; return n; });
+                            }}
+                            style={{ background: 'none', border: 'none', color: 'var(--fog)', cursor: 'pointer', padding: '0 2px', display: 'flex', alignItems: 'center', opacity: 0.6, lineHeight: 1 }}
+                            onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                            onMouseLeave={e => e.currentTarget.style.color = 'var(--fog)'}
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                          </button>
+                        )}
+                      </div>
+                      {field.type === 'select' ? (
+                        <select
+                          className="finder-input"
+                          value={ingestValues[field.key] || ''}
+                          onChange={e => setIngestValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          style={{ padding: '9px 12px', fontSize: '12px' }}
+                        >
+                          <option value="">Select...</option>
+                          {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      ) : (
+                        <input
+                          className="finder-input"
+                          type={field.type}
+                          required={field.required}
+                          placeholder={field.placeholder}
+                          value={ingestValues[field.key] || ''}
+                          onChange={e => setIngestValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          style={{ padding: '9px 12px', fontSize: '12px' }}
+                        />
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Submit row */}
                   <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '16px', marginTop: '4px' }}>
-                    <button type="submit" style={{
-                      padding: '10px 24px', fontSize: '12px', 
-                      background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.4)',
-                      color: '#c084fc', borderRadius: '8px', cursor: 'pointer', letterSpacing: '.06em', textTransform: 'uppercase'
-                    }}>
+                    <button type="submit" style={{ padding: '10px 24px', fontSize: '12px', background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.4)', color: '#c084fc', borderRadius: '8px', cursor: 'pointer', letterSpacing: '.06em', textTransform: 'uppercase', fontWeight: 600 }}>
                       {quickIngestStatus === 'Ingesting...' ? 'Ingesting...' : 'Ingest Lead'}
                     </button>
                     {quickIngestStatus && (
-                      <span style={{
-                        fontSize: '11px',
-                        color: quickIngestStatus.includes('successfully') ? '#4ade80' : (quickIngestStatus.includes('Ingesting') ? 'var(--gold)' : '#ef4444')
-                      }}>{quickIngestStatus}</span>
+                      <span style={{ fontSize: '11px', color: quickIngestStatus.includes('success') ? '#4ade80' : (quickIngestStatus.includes('Ingesting') ? 'var(--gold)' : '#ef4444') }}>
+                        {quickIngestStatus}
+                      </span>
                     )}
+                    <span style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--fog)' }}>
+                      {ingestFields.filter(f => !f.required).length} optional · {ingestFields.filter(f => f.required).length} required
+                    </span>
                   </div>
                 </form>
               </div>
 
-              {/* UPLOAD CARD */}
+
+              {/* UPLOAD CARD — BULK INGEST */}
               <div className="nlp-console-card" style={{ marginBottom: '24px' }}>
                 <div className="db-card-title-wrap">
                   <span className="db-card-title">Bulk Ingest Leads Directory</span>
                   <span style={{ fontSize: '10px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.06em' }}>CSV, JSON, or Excel File Ingestion Engine</span>
                 </div>
-                
-                <div className="bulk-ingest-row">
-                  <div style={{ flex: 1 }}>
-                    <p style={{ color: 'var(--mist)', fontSize: '12px', margin: '0 0 12px' }}>
-                      Upload a local `.csv`, `.json`, `.xlsx`, or `.xls` file to instantly ingest corporate listings into both PostgreSQL and RAG indexing. 
-                      Standard fields: <strong>company, industry, location, website, phone, email, ai_score</strong>.
-                    </p>
+
+                {/* Dynamic columns info */}
+                <div style={{ margin: '12px 0', padding: '10px 14px', background: 'rgba(232,150,42,0.06)', border: '1px solid rgba(232,150,42,0.18)', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--gold)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '6px' }}>Supported Column Names in File</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                    {['company / name', 'industry / niche', 'location / city', 'website', 'phone', 'email', 'contact_name', 'contact_title', 'address', 'whatsapp_number', 'rating', 'ai_score', 'status', 'next_followup', 'source', 'lat', 'lng', 'category', 'total_ratings', 'opening_hours', 'business_status', 'website_description', 'google_maps_url'].map(col => (
+                      <span key={col} style={{ padding: '2px 7px', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--line)', borderRadius: '4px', fontSize: '10px', color: 'var(--mist)', fontFamily: 'monospace' }}>{col}</span>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: '8px', fontSize: '11px', color: 'var(--fog)' }}>Any extra columns in your file will be accepted and stored. Missing columns will be auto-filled or AI-generated.</div>
+                </div>
+
                     
                     <div className="file-upload-zone" style={{
                       border: '1.5px dashed var(--line)',
@@ -2589,8 +2697,6 @@ const Dashboard = () => {
                       <span style={{ color: 'var(--cream)', fontSize: '13px', display: 'block' }}>Drag & drop or click to upload CSV, JSON, or Excel file</span>
                       <span style={{ color: 'var(--mist)', fontSize: '11px', display: 'block', marginTop: '4px' }}>Supports direct Postgres transactional loading & zero-vector RAG registration</span>
                     </div>
-                  </div>
-                </div>
 
                 {uploadMessage && (
                   <div style={{ marginTop: '16px', padding: '12px 16px', background: 'rgba(74, 222, 128, 0.1)', border: '1px solid rgba(74, 222, 128, 0.2)', color: '#4ade80', borderRadius: '4px', fontSize: '12px' }}>
