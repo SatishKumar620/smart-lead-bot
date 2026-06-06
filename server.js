@@ -751,27 +751,36 @@ app.put('/api/tasks/:taskId', async (req, res) => {
       [taskId]
     );
     const isCompleted = status === 'Completed';
-    // Notify all admins about completion
-    if (isCompleted) {
-      const adminRows = await pool.query(`SELECT id FROM users WHERE role = 'admin'`);
-      for (const admin of adminRows.rows) {
-        await createNotification(
-          admin.id,
-          'task_completed',
-          `Task Completed: ${title}`,
-          `Task "${title}" has been marked as Completed by a team member.`,
-          'tasks',
-          taskId
-        );
-      }
+    const isInProgress = status === 'In Progress';
+
+    // Notify ALL admins for every status change (Pending → In Progress → Completed)
+    const adminRows = await pool.query(`SELECT id FROM users WHERE role = 'admin'`);
+    for (const admin of adminRows.rows) {
+      if (admin.id === req.user.id) continue; // skip if admin made the change themselves
+      await createNotification(
+        admin.id,
+        isCompleted ? 'task_completed' : 'task_updated',
+        isCompleted
+          ? `Task Completed: ${title}`
+          : isInProgress
+            ? `Task In Progress: ${title}`
+            : `Task Updated: ${title}`,
+        isCompleted
+          ? `"${title}" has been marked Completed by a team member.`
+          : isInProgress
+            ? `"${title}" is now In Progress.`
+            : `"${title}" status changed to "${status}".`,
+        'tasks',
+        taskId
+      );
     }
     // Notify assignees (except who made the change)
     for (const row of assigneeRows.rows) {
       if (row.user_id !== req.user.id) {
         await createNotification(
           row.user_id,
-          'task_updated',
-          `Task ${isCompleted ? 'Completed' : 'Updated'}: ${title}`,
+          isCompleted ? 'task_completed' : 'task_updated',
+          `Task ${isCompleted ? 'Completed' : isInProgress ? 'In Progress' : 'Updated'}: ${title}`,
           `"${title}" status changed to "${status}".`,
           'assigned-tasks',
           taskId
