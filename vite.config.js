@@ -112,6 +112,40 @@ pool.query(`
 
   CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);
   CREATE INDEX IF NOT EXISTS idx_activities_lead ON lead_activities(lead_id);
+
+  -- Store dynamic custom fields as JSONB on leads
+  ALTER TABLE leads ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '{}'::jsonb;
+
+  -- Store quick ingest templates
+  CREATE TABLE IF NOT EXISTS ingest_templates (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) UNIQUE NOT NULL,
+      fields JSONB NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Store Google OAuth & API settings
+  CREATE TABLE IF NOT EXISTS google_settings (
+      id VARCHAR(255) PRIMARY KEY,
+      client_id TEXT,
+      client_secret TEXT,
+      redirect_uri TEXT,
+      access_token TEXT,
+      refresh_token TEXT,
+      token_expiry TIMESTAMP WITH TIME ZONE,
+      email TEXT
+  );
+
+  -- Track created Google Forms and whether they should automatically sync
+  CREATE TABLE IF NOT EXISTS google_forms (
+      id SERIAL PRIMARY KEY,
+      form_id VARCHAR(255) UNIQUE NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      responder_uri TEXT,
+      sync_enabled BOOLEAN DEFAULT TRUE,
+      last_synced_at TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  );
 `).then(() => {
   console.log('PostgreSQL: chat_memory and CRM extension tables verified/created.')
 }).catch(err => {
@@ -609,7 +643,8 @@ export default defineConfig({
                   lat: row.lat !== null && row.lat !== undefined && !isNaN(parseFloat(row.lat)) ? parseFloat(row.lat) : 12.9716,
                   lng: row.lng !== null && row.lng !== undefined && !isNaN(parseFloat(row.lng)) ? parseFloat(row.lng) : 77.5946,
                   assignedTo: row.assigned_to || '',
-                  assigned_to: row.assigned_to || ''
+                  assigned_to: row.assigned_to || '',
+                  custom_fields: row.custom_fields || {}
                 }))
                 res.statusCode = 200
                 res.end(JSON.stringify(mappedLeads))
@@ -716,8 +751,9 @@ export default defineConfig({
                       ai_score = $7,
                       ai_grade = $8,
                       status = $9,
-                      next_followup = $10
-                    WHERE lead_id = $11
+                      next_followup = $10,
+                      custom_fields = $11
+                    WHERE lead_id = $12
                   `, [
                     company || 'Unknown',
                     website || '',
@@ -729,6 +765,7 @@ export default defineConfig({
                     ai_grade || 'Warm',
                     status || 'New',
                     next_followup ? new Date(next_followup) : null,
+                    JSON.stringify(body.custom_fields || {}),
                     leadId
                   ])
                   
@@ -812,28 +849,37 @@ export default defineConfig({
                   const crypto = require('crypto')
                   
                   for (const lead of rawLeads) {
-                    const leadId = lead.leadId || crypto.randomUUID()
+                    const leadId = lead.leadId || lead.lead_id || crypto.randomUUID()
                     const name = lead.company || lead.name || 'Unknown'
-                    const niche = lead.industry || lead.niche || 'Other'
-                    const city = lead.location || lead.city || 'Bangalore'
-                    const website = lead.website || ''
-                    const phone = lead.phone || ''
-                    const email = lead.email || ''
-                    const score = parseInt(lead.ai_score || 5)
-                    const grade = lead.ai_grade || (score >= 8 ? 'Hot' : (score >= 5 ? 'Warm' : 'Cold'))
+                    const niche = lead.industry || lead.niche || null
+                    const city = lead.location || lead.city || null
+                    const website = lead.website || null
+                    const phone = lead.phone || null
+                    const email = lead.email || null
+                    const score = lead.ai_score !== undefined && lead.ai_score !== null ? parseInt(lead.ai_score) : null
+                    const grade = lead.ai_grade || (score >= 8 ? 'Hot' : (score >= 5 ? 'Warm' : (score !== null ? 'Cold' : null)))
                     const status = lead.status || 'New'
                     const nextFollowup = lead.next_followup ? new Date(lead.next_followup) : null
                     const source = lead.source || 'Manual Ingest'
-                    const lat = parseFloat(lead.lat || 12.9716)
-                    const lng = parseFloat(lead.lng || 77.5946)
-                    
+                    const lat = lead.lat !== undefined && lead.lat !== null ? parseFloat(lead.lat) : null
+                    const lng = lead.lng !== undefined && lead.lng !== null ? parseFloat(lead.lng) : null
+
+                    // Extract custom fields (everything that is not a core field)
+                    const coreKeys = ['leadId', 'lead_id', 'company', 'name', 'industry', 'niche', 'location', 'city', 'website', 'phone', 'email', 'source', 'lat', 'lng', 'ai_score', 'ai_grade', 'status', 'next_followup', 'timestamp', 'created_at', 'custom_fields']
+                    const customFields = { ...(lead.custom_fields || {}) }
+                    for (const key in lead) {
+                      if (!coreKeys.includes(key)) {
+                        customFields[key] = lead[key]
+                      }
+                    }
+
                     // Insert into leads table
                     await pool.query(`
                       INSERT INTO leads (
                         lead_id, name, niche, city, website, phone, email, 
-                        ai_score, ai_grade, status, source, timestamp, lat, lng, next_followup
+                        ai_score, ai_grade, status, source, timestamp, lat, lng, next_followup, custom_fields
                       )
-                      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, $13, $14)
+                      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, $13, $14, $15)
                       ON CONFLICT (lead_id) DO UPDATE SET
                         name = EXCLUDED.name,
                         niche = EXCLUDED.niche,
@@ -844,10 +890,11 @@ export default defineConfig({
                         ai_score = EXCLUDED.ai_score,
                         ai_grade = EXCLUDED.ai_grade,
                         status = EXCLUDED.status,
-                        next_followup = EXCLUDED.next_followup
+                        next_followup = EXCLUDED.next_followup,
+                        custom_fields = EXCLUDED.custom_fields
                     `, [
                       leadId, name, niche, city, website, phone, email,
-                      score, grade, status, source, lat, lng, nextFollowup
+                      score, grade, status, source, lat, lng, nextFollowup, JSON.stringify(customFields)
                     ])
                     
                     // Insert into lead_vectors table to keep RAG synchronized
@@ -867,9 +914,9 @@ export default defineConfig({
                         ai_grade = EXCLUDED.ai_grade,
                         text_chunk = EXCLUDED.text_chunk
                     `, [
-                      leadId, name, city, niche, phone, website,
-                      score, grade, !website, true,
-                      `Business Name: ${name}. Industry: ${niche}. City: ${city}. Score: ${score}/10. Status: ${status}. Contact Phone: ${phone}. Email: ${email}. Source: ${source}.`
+                      leadId, name, city || 'N/A', niche || 'N/A', phone, website,
+                      score || 5, grade || 'Warm', !website, true,
+                      `Business Name: ${name}. Industry: ${niche || 'N/A'}. City: ${city || 'N/A'}. Score: ${score || 'N/A'}/10. Status: ${status}. Contact Phone: ${phone || 'N/A'}. Email: ${email || 'N/A'}. Source: ${source}.`
                     ])
                     
                     insertedCount.push(leadId)
@@ -882,7 +929,7 @@ export default defineConfig({
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
-                            niche: niche.toLowerCase(),
+                            niche: niche ? niche.toLowerCase() : '',
                             city: city,
                             limit: 1,
                             companies: [name]
@@ -1577,6 +1624,512 @@ ${JSON.stringify(leadsData)}`
               res.statusCode = 500
               res.end('Failed to read logs: ' + err.message)
             }
+            return
+          }
+
+          // GET /api/ingest-templates
+          if (req.url && req.url.startsWith('/api/ingest-templates')) {
+            res.setHeader('Content-Type', 'application/json')
+            if (req.method === 'GET') {
+              try {
+                const result = await pool.query('SELECT * FROM ingest_templates ORDER BY created_at DESC')
+                res.statusCode = 200
+                res.end(JSON.stringify(result.rows))
+              } catch (err) {
+                res.statusCode = 500
+                res.end(JSON.stringify({ error: err.message }))
+              }
+              return
+            }
+            if (req.method === 'POST') {
+              let bodyStr = ''
+              req.on('data', chunk => { bodyStr += chunk })
+              req.on('end', async () => {
+                try {
+                  const { name, fields } = JSON.parse(bodyStr)
+                  if (!name || !fields || !Array.isArray(fields)) {
+                    res.statusCode = 400
+                    res.end(JSON.stringify({ error: 'Missing name or fields array' }))
+                    return
+                  }
+                  const result = await pool.query(
+                    'INSERT INTO ingest_templates (name, fields) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET fields = EXCLUDED.fields RETURNING *',
+                    [name, JSON.stringify(fields)]
+                  )
+                  res.statusCode = 200
+                  res.end(JSON.stringify(result.rows[0]))
+                } catch (err) {
+                  res.statusCode = 500
+                  res.end(JSON.stringify({ error: err.message }))
+                }
+              })
+              return
+            }
+            if (req.method === 'DELETE') {
+              const parts = req.url.split('/')
+              const id = parts[parts.length - 1]
+              try {
+                await pool.query('DELETE FROM ingest_templates WHERE id = $1', [id])
+                res.statusCode = 200
+                res.end(JSON.stringify({ message: 'Template deleted successfully' }))
+              } catch (err) {
+                res.statusCode = 500
+                res.end(JSON.stringify({ error: err.message }))
+              }
+              return
+            }
+          }
+
+          // GET /api/google/status
+          if (req.url && req.url.startsWith('/api/google/status')) {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+              const result = await pool.query("SELECT client_id, email, access_token, refresh_token FROM google_settings WHERE id = 'global'")
+              if (result.rows.length === 0) {
+                res.statusCode = 200
+                res.end(JSON.stringify({ connected: false, configured: false }))
+                return
+              }
+              const row = result.rows[0]
+              const configured = !!row.client_id
+              const connected = !!row.access_token
+              res.statusCode = 200
+              res.end(JSON.stringify({
+                connected,
+                configured,
+                email: row.email || null,
+                client_id: row.client_id ? `${row.client_id.substring(0, 8)}...` : null
+              }))
+            } catch (err) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ error: err.message }))
+            }
+            return
+          }
+
+          // POST /api/google/save-credentials
+          if (req.url && req.url.startsWith('/api/google/save-credentials') && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let bodyStr = ''
+            req.on('data', chunk => { bodyStr += chunk })
+            req.on('end', async () => {
+              try {
+                const { client_id, client_secret, redirect_uri } = JSON.parse(bodyStr)
+                if (!client_id || !client_secret || !redirect_uri) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ error: 'Missing client_id, client_secret, or redirect_uri' }))
+                  return
+                }
+                await pool.query(`
+                  INSERT INTO google_settings (id, client_id, client_secret, redirect_uri)
+                  VALUES ('global', $1, $2, $3)
+                  ON CONFLICT (id) DO UPDATE SET
+                    client_id = EXCLUDED.client_id,
+                    client_secret = EXCLUDED.client_secret,
+                    redirect_uri = EXCLUDED.redirect_uri
+                `, [client_id.trim(), client_secret.trim(), redirect_uri.trim()])
+                res.statusCode = 200
+                res.end(JSON.stringify({ message: 'Google Client credentials saved successfully' }))
+              } catch (err) {
+                res.statusCode = 500
+                res.end(JSON.stringify({ error: err.message }))
+              }
+            })
+            return
+          }
+
+          // GET /api/google/auth-url
+          if (req.url && req.url.startsWith('/api/google/auth-url')) {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+              const result = await pool.query("SELECT client_id, redirect_uri FROM google_settings WHERE id = 'global'")
+              if (result.rows.length === 0 || !result.rows[0].client_id) {
+                res.statusCode = 400
+                res.end(JSON.stringify({ error: 'Google Client Credentials are not configured.' }))
+                return
+              }
+              const { client_id, redirect_uri } = result.rows[0]
+              const scopes = [
+                'https://www.googleapis.com/auth/forms.body',
+                'https://www.googleapis.com/auth/forms.responses.readonly',
+                'https://www.googleapis.com/auth/userinfo.profile',
+                'https://www.googleapis.com/auth/userinfo.email'
+              ].join(' ')
+              
+              const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+                `client_id=${encodeURIComponent(client_id)}&` +
+                `redirect_uri=${encodeURIComponent(redirect_uri)}&` +
+                `response_type=code&` +
+                `scope=${encodeURIComponent(scopes)}&` +
+                `access_type=offline&` +
+                `prompt=consent`
+                
+              res.statusCode = 200
+              res.end(JSON.stringify({ url: authUrl }))
+            } catch (err) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ error: err.message }))
+            }
+            return
+          }
+
+          // OAuth Callback /api/auth/google/callback
+          if (req.url && req.url.startsWith('/api/auth/google/callback')) {
+            const parsedUrl = new URL(req.url, `http://${req.headers.host}`)
+            const code = parsedUrl.searchParams.get('code')
+            if (!code) {
+              res.statusCode = 400
+              res.end('OAuth Error: Missing code query parameter')
+              return
+            }
+            
+            try {
+              const credentials = await pool.query("SELECT client_id, client_secret, redirect_uri FROM google_settings WHERE id = 'global'")
+              if (credentials.rows.length === 0) {
+                res.statusCode = 400
+                res.end('OAuth Error: Credentials not found in settings')
+                return
+              }
+              const { client_id, client_secret, redirect_uri } = credentials.rows[0]
+              
+              const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                  code,
+                  client_id,
+                  client_secret,
+                  redirect_uri,
+                  grant_type: 'authorization_code'
+                })
+              })
+              
+              if (!tokenRes.ok) {
+                const errText = await tokenRes.text()
+                throw new Error(`Token exchange failed: ${errText}`)
+              }
+              
+              const tokenData = await tokenRes.json()
+              const { access_token, refresh_token, expires_in } = tokenData
+              const tokenExpiry = new Date(Date.now() + (expires_in || 3600) * 1000)
+              
+              const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+                headers: { 'Authorization': `Bearer ${access_token}` }
+              })
+              
+              let email = null
+              if (profileRes.ok) {
+                const profile = await profileRes.json()
+                email = profile.email
+              }
+              
+              await pool.query(`
+                UPDATE google_settings SET
+                  access_token = $1,
+                  refresh_token = COALESCE($2, refresh_token),
+                  token_expiry = $3,
+                  email = COALESCE($4, email)
+                WHERE id = 'global'
+              `, [access_token, refresh_token || null, tokenExpiry, email])
+              
+              res.setHeader('Content-Type', 'text/html')
+              res.statusCode = 200
+              res.end(`
+                <html>
+                  <head>
+                    <style>
+                      body { background: #0f172a; color: #f8fafc; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                      h2 { color: #38bdf8; }
+                      .spinner { width: 50px; height: 50px; border: 5px solid #1e293b; border-top-color: #38bdf8; border-radius: 50%; animation: spin 1s linear infinite; margin-top: 20px; }
+                      @keyframes spin { to { transform: rotate(360deg); } }
+                    </style>
+                  </head>
+                  <body>
+                    <h2>Google Account Connected Successfully!</h2>
+                    <p>Redirecting you back to the B2B dashboard...</p>
+                    <div class="spinner"></div>
+                    <script>
+                      setTimeout(() => {
+                        window.location.href = '/';
+                      }, 2000);
+                    </script>
+                  </body>
+                </html>
+              `)
+            } catch (err) {
+              console.error('Google OAuth Callback Error:', err.message)
+              res.statusCode = 500
+              res.end(`OAuth callback error: ${err.message}`)
+            }
+            return
+          }
+
+          // POST /api/google-forms/create
+          if (req.url && req.url.startsWith('/api/google-forms/create') && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let bodyStr = ''
+            req.on('data', chunk => { bodyStr += chunk })
+            req.on('end', async () => {
+              try {
+                const { title, fields } = JSON.parse(bodyStr)
+                if (!title || !fields || !Array.isArray(fields)) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ error: 'Missing form title or fields schema array' }))
+                  return
+                }
+                
+                // Read global credentials
+                const googleSettingsCheck = await pool.query("SELECT * FROM google_settings WHERE id = 'global'")
+                if (googleSettingsCheck.rows.length === 0 || !googleSettingsCheck.rows[0].access_token) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ error: 'Google integration not connected' }))
+                  return
+                }
+                
+                // Refresh token if needed
+                let accessToken
+                try {
+                  accessToken = await getFreshGoogleToken()
+                } catch (tokErr) {
+                  res.statusCode = 401
+                  res.end(JSON.stringify({ error: tokErr.message }))
+                  return
+                }
+                
+                // Create Form
+                const createRes = await fetch('https://forms.googleapis.com/v1/forms', {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    info: {
+                      title: title,
+                      documentTitle: title
+                    }
+                  })
+                })
+                
+                if (!createRes.ok) {
+                  const errText = await createRes.text()
+                  throw new Error(`Google Form creation failed: ${errText}`)
+                }
+                
+                const formData = await createRes.json()
+                const { formId, responderUri } = formData
+                
+                const requests = fields.map((field, index) => {
+                  return {
+                    createItem: {
+                      item: {
+                        title: field.label,
+                        description: `[Key: ${field.key}]`,
+                        questionItem: {
+                          question: {
+                            required: field.required || false,
+                            textQuestion: {}
+                          }
+                        }
+                      },
+                      location: {
+                        index: index
+                      }
+                    }
+                  }
+                })
+                
+                const updateRes = await fetch(`https://forms.googleapis.com/v1/forms/${formId}:batchUpdate`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({ requests })
+                })
+                
+                if (!updateRes.ok) {
+                  const errText = await updateRes.text()
+                  throw new Error(`Failed to populate Form questions: ${errText}`)
+                }
+                
+                const dbRes = await pool.query(`
+                  INSERT INTO google_forms (form_id, title, responder_uri)
+                  VALUES ($1, $2, $3)
+                  RETURNING *
+                `, [formId, title, responderUri])
+                
+                res.statusCode = 200
+                res.end(JSON.stringify(dbRes.rows[0]))
+              } catch (err) {
+                console.error('Google Form Create Error:', err.message)
+                res.statusCode = 500
+                res.end(JSON.stringify({ error: err.message }))
+              }
+            })
+            return
+          }
+
+          // GET /api/google-forms/list
+          if (req.url && req.url.startsWith('/api/google-forms/list')) {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+              const result = await pool.query('SELECT * FROM google_forms ORDER BY created_at DESC')
+              res.statusCode = 200
+              res.end(JSON.stringify(result.rows))
+            } catch (err) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ error: err.message }))
+            }
+            return
+          }
+
+          // POST /api/google-forms/sync
+          if (req.url && req.url.startsWith('/api/google-forms/sync') && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let bodyStr = ''
+            req.on('data', chunk => { bodyStr += chunk })
+            req.on('end', async () => {
+              try {
+                const { formId } = JSON.parse(bodyStr)
+                if (!formId) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ error: 'Missing formId parameter' }))
+                  return
+                }
+                
+                let accessToken
+                try {
+                  accessToken = await getFreshGoogleToken()
+                } catch (tokErr) {
+                  res.statusCode = 401
+                  res.end(JSON.stringify({ error: tokErr.message }))
+                  return
+                }
+                
+                const formMetaRes = await fetch(`https://forms.googleapis.com/v1/forms/${formId}`, {
+                  headers: { 'Authorization': `Bearer ${accessToken}` }
+                })
+                
+                if (!formMetaRes.ok) {
+                  const errText = await formMetaRes.text()
+                  throw new Error(`Failed to retrieve Form questions: ${errText}`)
+                }
+                
+                const formMeta = await formMetaRes.json()
+                const items = formMeta.items || []
+                
+                const questionIdToKey = {}
+                items.forEach(item => {
+                  if (item.questionItem && item.questionItem.question) {
+                    const questionId = item.questionItem.question.questionId
+                    const desc = item.description || ''
+                    const match = desc.match(/\[Key:\s*(.*?)\]/)
+                    if (match) {
+                      questionIdToKey[questionId] = match[1].trim()
+                    } else {
+                      const slug = item.title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+                      questionIdToKey[questionId] = slug
+                    }
+                  }
+                })
+                
+                const responsesRes = await fetch(`https://forms.googleapis.com/v1/forms/${formId}/responses`, {
+                  headers: { 'Authorization': `Bearer ${accessToken}` }
+                })
+                
+                if (!responsesRes.ok) {
+                  const errText = await responsesRes.text()
+                  throw new Error(`Failed to retrieve Form responses: ${errText}`)
+                }
+                
+                const responsesData = await responsesRes.json()
+                const responses = responsesData.responses || []
+                
+                let importedCount = 0
+                
+                for (const resp of responses) {
+                  const responseId = resp.responseId
+                  const lastSubmittedTime = resp.lastSubmittedTime
+                  const answers = resp.answers || {}
+                  
+                  const leadId = `google_form_${responseId}`
+                  const checkRes = await pool.query('SELECT lead_id FROM leads WHERE lead_id = $1', [leadId])
+                  if (checkRes.rows.length > 0) {
+                    continue
+                  }
+                  
+                  const leadObj = {
+                    leadId,
+                    source: `Google Form Sub`
+                  }
+                  
+                  Object.keys(answers).forEach(qId => {
+                    const key = questionIdToKey[qId]
+                    const textAnswers = answers[qId].textAnswers?.answers || []
+                    const val = textAnswers.map(a => a.value).join(', ')
+                    if (key) {
+                      leadObj[key] = val
+                    }
+                  })
+                  
+                  const name = leadObj.company || leadObj.name || 'Unknown'
+                  const niche = leadObj.industry || leadObj.niche || null
+                  const city = leadObj.location || leadObj.city || null
+                  const website = leadObj.website || null
+                  const phone = leadObj.phone || null
+                  const email = leadObj.email || null
+                  
+                  const coreKeys = ['leadId', 'company', 'name', 'industry', 'niche', 'location', 'city', 'website', 'phone', 'email', 'source', 'lat', 'lng', 'ai_score', 'ai_grade', 'status', 'next_followup', 'timestamp', 'created_at', 'custom_fields']
+                  const customFields = {}
+                  Object.keys(leadObj).forEach(key => {
+                    if (!coreKeys.includes(key)) {
+                      customFields[key] = leadObj[key]
+                    }
+                  })
+                  
+                  await pool.query(`
+                    INSERT INTO leads (
+                      lead_id, name, niche, city, website, phone, email, 
+                      ai_score, ai_grade, ai_needs_website, ai_needs_marketing, 
+                      ai_best_contact, ai_whatsapp_message, ai_email_subject, ai_recommended_service, ai_reason,
+                      status, source, timestamp, lat, lng, next_followup, custom_fields
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, null, null, $10, null, null, null, null, $11, $12, $13, null, null, null, $14)
+                  `, [
+                    leadId, name, niche, city, website, phone, email,
+                    null, null, phone ? 'Call' : (email ? 'Email' : 'Visit'),
+                    'New', `Google Form: ${formMeta.info.title}`, new Date(lastSubmittedTime), JSON.stringify(customFields)
+                  ])
+                  
+                  await pool.query(`
+                    INSERT INTO lead_vectors (
+                      lead_id, business_name, city, niche, phone, website, 
+                      ai_score, ai_grade, needs_website, needs_marketing, text_chunk, embedding, created_at
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, ARRAY_FILL(0::float, ARRAY[1024])::double precision[], $12)
+                  `, [
+                    leadId, name, city || 'N/A', niche || 'N/A', phone, website,
+                    5, 'Warm', !website, true,
+                    `Business Name: ${name}. Industry: ${niche || 'N/A'}. City: ${city || 'N/A'}. Score: N/A/10. Grade: Warm. Contact phone: ${phone || 'N/A'}. email: ${email || 'N/A'}. Source: Google Form.`,
+                    new Date(lastSubmittedTime)
+                  ])
+                  
+                  importedCount++
+                }
+                
+                await pool.query(`
+                  UPDATE google_forms SET last_synced_at = NOW() WHERE form_id = $1
+                `, [formId])
+                
+                res.statusCode = 200
+                res.end(JSON.stringify({ message: `Successfully synced! Imported ${importedCount} new leads.`, count: importedCount }))
+              } catch (err) {
+                console.error('Google Form Sync Error:', err.message)
+                res.statusCode = 500
+                res.end(JSON.stringify({ error: err.message }))
+              }
+            })
             return
           }
 

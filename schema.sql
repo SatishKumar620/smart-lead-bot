@@ -160,3 +160,37 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC);
+
+-- Store dynamic custom fields as JSONB on leads
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '{}'::jsonb;
+
+-- Store quick ingest templates
+CREATE TABLE IF NOT EXISTS ingest_templates (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL,
+    fields JSONB NOT NULL, -- Array of field definitions: [{key, label, type, required}]
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Store Google OAuth & API settings
+CREATE TABLE IF NOT EXISTS google_settings (
+    id VARCHAR(255) PRIMARY KEY, -- 'global'
+    client_id TEXT,
+    client_secret TEXT,
+    redirect_uri TEXT,
+    access_token TEXT,
+    refresh_token TEXT,
+    token_expiry TIMESTAMP WITH TIME ZONE,
+    email TEXT
+);
+
+-- Track created Google Forms and whether they should automatically sync
+CREATE TABLE IF NOT EXISTS google_forms (
+    id SERIAL PRIMARY KEY,
+    form_id VARCHAR(255) UNIQUE NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    responder_uri TEXT,
+    sync_enabled BOOLEAN DEFAULT TRUE,
+    last_synced_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

@@ -172,6 +172,40 @@ pool.query(`
   );
   CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
   CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC);
+
+  -- Store dynamic custom fields as JSONB on leads
+  ALTER TABLE leads ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '{}'::jsonb;
+
+  -- Store quick ingest templates
+  CREATE TABLE IF NOT EXISTS ingest_templates (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) UNIQUE NOT NULL,
+      fields JSONB NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Store Google OAuth & API settings
+  CREATE TABLE IF NOT EXISTS google_settings (
+      id VARCHAR(255) PRIMARY KEY,
+      client_id TEXT,
+      client_secret TEXT,
+      redirect_uri TEXT,
+      access_token TEXT,
+      refresh_token TEXT,
+      token_expiry TIMESTAMP WITH TIME ZONE,
+      email TEXT
+  );
+
+  -- Track created Google Forms and whether they should automatically sync
+  CREATE TABLE IF NOT EXISTS google_forms (
+      id SERIAL PRIMARY KEY,
+      form_id VARCHAR(255) UNIQUE NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      responder_uri TEXT,
+      sync_enabled BOOLEAN DEFAULT TRUE,
+      last_synced_at TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  );
 `).then(() => {
   console.log('PostgreSQL: Tables verified.');
 }).catch(err => {
@@ -995,7 +1029,8 @@ app.get('/api/leads', async (req, res) => {
       lat: row.lat !== null && row.lat !== undefined && !isNaN(parseFloat(row.lat)) ? parseFloat(row.lat) : 12.9716,
       lng: row.lng !== null && row.lng !== undefined && !isNaN(parseFloat(row.lng)) ? parseFloat(row.lng) : 77.5946,
       assignedTo: row.assigned_to || '',
-      assigned_to: row.assigned_to || ''
+      assigned_to: row.assigned_to || '',
+      custom_fields: row.custom_fields || {}
     }));
     res.json(mappedLeads);
   } catch (err) {
@@ -1072,11 +1107,12 @@ app.put('/api/leads', async (req, res) => {
     await pool.query(`
       UPDATE leads SET 
         name = $1, website = $2, phone = $3, email = $4, niche = $5, city = $6,
-        ai_score = $7, ai_grade = $8, status = $9, next_followup = $10
-      WHERE lead_id = $11
+        ai_score = $7, ai_grade = $8, status = $9, next_followup = $10, custom_fields = $11
+      WHERE lead_id = $12
     `, [
       company || 'Unknown', website || '', phone || '', email || '', industry || 'Other', location || 'Bangalore',
       parseInt(ai_score || 5), ai_grade || 'Warm', status || 'New', next_followup ? new Date(next_followup) : null,
+      JSON.stringify(req.body.custom_fields || {}),
       leadId
     ]);
     
@@ -1112,106 +1148,67 @@ app.delete('/api/leads', async (req, res) => {
   }
 });
 
-// Single Manual Lead Ingest (Navbar Form / home page submission)
 app.post('/api/leads', async (req, res) => {
   try {
     const body = req.body;
     const rawLeads = Array.isArray(body) ? body : [body];
     const insertedCount = [];
-    const groqKey = getGroqApiKey();
     
     for (const lead of rawLeads) {
-      const leadId = lead.leadId || crypto.randomUUID();
+      const leadId = lead.leadId || lead.lead_id || crypto.randomUUID();
       const name = lead.company || lead.name || 'Unknown';
-      const niche = lead.industry || lead.niche || 'Other';
-      const city = lead.location || lead.city || 'Bangalore';
-      const website = lead.website || '';
-      const phone = lead.phone || '';
-      const email = lead.email || '';
+      const niche = lead.industry || lead.niche || null;
+      const city = lead.location || lead.city || null;
+      const website = lead.website || null;
+      const phone = lead.phone || null;
+      const email = lead.email || null;
       const source = lead.source || 'Manual Ingest';
-      const lat = parseFloat(lead.lat || 12.9716);
-      const lng = parseFloat(lead.lng || 77.5946);
+      const lat = lead.lat !== undefined && lead.lat !== null ? parseFloat(lead.lat) : null;
+      const lng = lead.lng !== undefined && lead.lng !== null ? parseFloat(lead.lng) : null;
       
-      // Perform direct AI enrichment for single manual ingest leads to ensure high-fidelity profiles
-      let score = parseInt(lead.ai_score || 5);
-      let grade = lead.ai_grade || (score >= 8 ? 'Hot' : (score >= 5 ? 'Warm' : 'Cold'));
-      let needsWebsite = !website;
-      let needsMarketing = true;
-      let bestContact = phone ? 'Call' : (email ? 'Email' : 'Visit');
-      let whatsappMessage = `Namaste! Aapka ${name} business dekha — kya digital growth mein interested hain?`;
-      let emailSubject = `Quick question for ${name}`;
-      let recommendedService = 'Digital Marketing';
-      let reason = 'Manually ingested lead.';
-      let followUpDays = 3;
+      const score = lead.ai_score !== undefined && lead.ai_score !== null ? parseInt(lead.ai_score) : null;
+      const grade = lead.ai_grade || (score >= 8 ? 'Hot' : (score >= 5 ? 'Warm' : (score !== null ? 'Cold' : null)));
+      const needsWebsite = website ? false : true;
+      const needsMarketing = null;
+      const bestContact = phone ? 'Call' : (email ? 'Email' : 'Visit');
+      const whatsappMessage = null;
+      const emailSubject = null;
+      const recommendedService = null;
+      const reason = null;
       
-      if (groqKey) {
-        try {
-          const aiResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${groqKey}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              model: 'llama-3.3-70b-versatile',
-              max_tokens: 600,
-              temperature: 0.1,
-              response_format: { type: "json_object" },
-              messages: [
-                {
-                  role: 'system',
-                  content: 'You are an Indian B2B sales AI. Return ONLY a valid JSON object. Required fields: score (integer 1-10), grade (Hot|Warm|Cold), needs_website (boolean), needs_social_media (boolean), needs_software (boolean), needs_marketing (boolean), business_stage (Growing|Established|Struggling|Unknown), best_contact_method (WhatsApp|Call|Email|Visit), whatsapp_message (string Hinglish under 80 words), email_subject (string), email_body (string), recommended_service (string), follow_up_days (integer 1-14), reason (string).'
-                },
-                {
-                  role: 'user',
-                  content: `Score this Indian business: Name=${name}, Industry=${niche}, City=${city}, Phone=${phone}, Website=${website || 'None'}, Email=${email}`
-                }
-              ]
-            })
-          });
-          
-          if (aiResponse.ok) {
-            const aiData = await aiResponse.json();
-            const ai = JSON.parse(aiData.choices?.[0]?.message?.content || '{}');
-            score = Math.min(10, Math.max(1, parseInt(ai.score) || score));
-            grade = ai.grade || (score >= 8 ? 'Hot' : (score >= 5 ? 'Warm' : 'Cold'));
-            needsWebsite = ai.needs_website !== undefined ? ai.needs_website : needsWebsite;
-            needsMarketing = ai.needs_marketing !== undefined ? ai.needs_marketing : needsMarketing;
-            bestContact = ai.best_contact_method || bestContact;
-            whatsappMessage = ai.whatsapp_message || whatsappMessage;
-            emailSubject = ai.email_subject || emailSubject;
-            recommendedService = ai.recommended_service || recommendedService;
-            reason = ai.reason || reason;
-            followUpDays = parseInt(ai.follow_up_days) || followUpDays;
-          }
-        } catch (enrichErr) {
-          console.warn('Direct AI enrichment during ingest failed, using fallbacks:', enrichErr.message);
+      const nextFollowup = lead.next_followup ? new Date(lead.next_followup) : null;
+      
+      // Extract custom fields (everything that is not a core field)
+      const coreKeys = ['leadId', 'lead_id', 'company', 'name', 'industry', 'niche', 'location', 'city', 'website', 'phone', 'email', 'source', 'lat', 'lng', 'ai_score', 'ai_grade', 'status', 'next_followup', 'timestamp', 'created_at', 'custom_fields'];
+      const customFields = { ...(lead.custom_fields || {}) };
+      for (const key in lead) {
+        if (!coreKeys.includes(key)) {
+          customFields[key] = lead[key];
         }
       }
-      
-      const nextFollowup = lead.next_followup ? new Date(lead.next_followup) : new Date(Date.now() + followUpDays * 86400000);
-      
+
       // Save to leads table
       await pool.query(`
         INSERT INTO leads (
           lead_id, name, niche, city, website, phone, email, 
           ai_score, ai_grade, ai_needs_website, ai_needs_marketing, 
           ai_best_contact, ai_whatsapp_message, ai_email_subject, ai_recommended_service, ai_reason,
-          status, source, timestamp, lat, lng, next_followup
+          status, source, timestamp, lat, lng, next_followup, custom_fields
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), $19, $20, $21)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), $19, $20, $21, $22)
         ON CONFLICT (lead_id) DO UPDATE SET
           name = EXCLUDED.name, niche = EXCLUDED.niche, city = EXCLUDED.city,
           website = EXCLUDED.website, phone = EXCLUDED.phone, email = EXCLUDED.email,
           ai_score = EXCLUDED.ai_score, ai_grade = EXCLUDED.ai_grade,
           ai_whatsapp_message = EXCLUDED.ai_whatsapp_message, ai_email_subject = EXCLUDED.ai_email_subject,
           ai_recommended_service = EXCLUDED.ai_recommended_service, ai_reason = EXCLUDED.ai_reason,
-          status = EXCLUDED.status, next_followup = EXCLUDED.next_followup
+          status = EXCLUDED.status, next_followup = EXCLUDED.next_followup,
+          custom_fields = EXCLUDED.custom_fields
       `, [
         leadId, name, niche, city, website, phone, email,
         score, grade, needsWebsite, needsMarketing,
         bestContact, whatsappMessage, emailSubject, recommendedService, reason,
-        lead.status || 'New', source, lat, lng, nextFollowup
+        lead.status || 'New', source, lat, lng, nextFollowup, JSON.stringify(customFields)
       ]);
       
       // Save vector search entry
@@ -1226,9 +1223,9 @@ app.post('/api/leads', async (req, res) => {
           phone = EXCLUDED.phone, website = EXCLUDED.website, ai_score = EXCLUDED.ai_score,
           ai_grade = EXCLUDED.ai_grade, text_chunk = EXCLUDED.text_chunk
       `, [
-        leadId, name, city, niche, phone, website,
-        score, grade, needsWebsite, needsMarketing,
-        `Business Name: ${name}. Industry: ${niche}. City: ${city}. Score: ${score}/10. Grade: ${grade}. Recommended: ${recommendedService}. contact phone: ${phone}. email: ${email}.`,
+        leadId, name, city || 'N/A', niche || 'N/A', phone, website,
+        score || 5, grade || 'Warm', needsWebsite, true,
+        `Business Name: ${name}. Industry: ${niche || 'N/A'}. City: ${city || 'N/A'}. Score: ${score || 'N/A'}/10. Grade: ${grade || 'N/A'}. contact phone: ${phone || 'N/A'}. email: ${email || 'N/A'}.`,
       ]);
       
       insertedCount.push(leadId);
@@ -1241,15 +1238,13 @@ app.post('/api/leads', async (req, res) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              niche: niche.toLowerCase(),
+              niche: niche ? niche.toLowerCase() : '',
               city: city,
               limit: 1,
               companies: [name]
             })
           });
-        } catch (n8nErr) {
-          console.warn('n8n notification dispatch skipped:', n8nErr.message);
-        }
+        } catch (n8nErr) { /* ignore */ }
       }
     }
     
@@ -1979,6 +1974,490 @@ app.get('/api/import-logs', (req, res) => {
     }
   } catch (err) {
     res.status(500).send('Failed to read logs: ' + err.message);
+  }
+});
+
+
+// ═══ CUSTOM INGEST TEMPLATES API ═══
+
+app.get('/api/ingest-templates', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM ingest_templates ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ingest-templates', async (req, res) => {
+  try {
+    const { name, fields } = req.body;
+    if (!name || !fields || !Array.isArray(fields)) {
+      return res.status(400).json({ error: 'Missing name or fields array' });
+    }
+    const result = await pool.query(
+      'INSERT INTO ingest_templates (name, fields) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET fields = EXCLUDED.fields RETURNING *',
+      [name, JSON.stringify(fields)]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/ingest-templates/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM ingest_templates WHERE id = $1', [req.params.id]);
+    res.json({ message: 'Template deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══ GOOGLE OAUTH & FORMS API INTEGRATION ═══
+
+// Get Google Integration Connection Status
+app.get('/api/google/status', async (req, res) => {
+  try {
+    const result = await pool.query("SELECT client_id, email, access_token, refresh_token FROM google_settings WHERE id = 'global'");
+    if (result.rows.length === 0) {
+      return res.json({ connected: false, configured: false });
+    }
+    const row = result.rows[0];
+    const configured = !!row.client_id;
+    const connected = !!row.access_token;
+    res.json({
+      connected,
+      configured,
+      email: row.email || null,
+      client_id: row.client_id ? `${row.client_id.substring(0, 8)}...` : null
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Save Google Client Credentials
+app.post('/api/google/save-credentials', async (req, res) => {
+  try {
+    const { client_id, client_secret, redirect_uri } = req.body;
+    if (!client_id || !client_secret || !redirect_uri) {
+      return res.status(400).json({ error: 'Missing client_id, client_secret, or redirect_uri' });
+    }
+    await pool.query(`
+      INSERT INTO google_settings (id, client_id, client_secret, redirect_uri)
+      VALUES ('global', $1, $2, $3)
+      ON CONFLICT (id) DO UPDATE SET
+        client_id = EXCLUDED.client_id,
+        client_secret = EXCLUDED.client_secret,
+        redirect_uri = EXCLUDED.redirect_uri
+    `, [client_id.trim(), client_secret.trim(), redirect_uri.trim()]);
+    res.json({ message: 'Google Client credentials saved successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Generate Consent Screen Auth URL
+app.get('/api/google/auth-url', async (req, res) => {
+  try {
+    const result = await pool.query("SELECT client_id, redirect_uri FROM google_settings WHERE id = 'global'");
+    if (result.rows.length === 0 || !result.rows[0].client_id) {
+      return res.status(400).json({ error: 'Google Client Credentials are not configured.' });
+    }
+    const { client_id, redirect_uri } = result.rows[0];
+    const scopes = [
+      'https://www.googleapis.com/auth/forms.body',
+      'https://www.googleapis.com/auth/forms.responses.readonly',
+      'https://www.googleapis.com/auth/userinfo.profile',
+      'https://www.googleapis.com/auth/userinfo.email'
+    ].join(' ');
+    
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${encodeURIComponent(client_id)}&` +
+      `redirect_uri=${encodeURIComponent(redirect_uri)}&` +
+      `response_type=code&` +
+      `scope=${encodeURIComponent(scopes)}&` +
+      `access_type=offline&` +
+      `prompt=consent`;
+      
+    res.json({ url: authUrl });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// OAuth Callback Route
+app.get('/api/auth/google/callback', async (req, res) => {
+  const { code } = req.query;
+  if (!code) {
+    return res.status(400).send('OAuth Error: Missing code query parameter');
+  }
+  
+  try {
+    // Read global credentials
+    const credentials = await pool.query("SELECT client_id, client_secret, redirect_uri FROM google_settings WHERE id = 'global'");
+    if (credentials.rows.length === 0) {
+      return res.status(400).send('OAuth Error: Credentials not found in settings');
+    }
+    
+    const { client_id, client_secret, redirect_uri } = credentials.rows[0];
+    
+    // Exchange code for tokens
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id,
+        client_secret,
+        redirect_uri,
+        grant_type: 'authorization_code'
+      })
+    });
+    
+    if (!tokenRes.ok) {
+      const errText = await tokenRes.text();
+      throw new Error(`Token exchange failed: ${errText}`);
+    }
+    
+    const tokenData = await tokenRes.json();
+    const { access_token, refresh_token, expires_in } = tokenData;
+    const tokenExpiry = new Date(Date.now() + (expires_in || 3600) * 1000);
+    
+    // Fetch user profile to get email
+    const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { 'Authorization': `Bearer ${access_token}` }
+    });
+    
+    let email = null;
+    if (profileRes.ok) {
+      const profile = await profileRes.json();
+      email = profile.email;
+    }
+    
+    // Save tokens in database
+    await pool.query(`
+      UPDATE google_settings SET
+        access_token = $1,
+        refresh_token = COALESCE($2, refresh_token),
+        token_expiry = $3,
+        email = COALESCE($4, email)
+      WHERE id = 'global'
+    `, [access_token, refresh_token || null, tokenExpiry, email]);
+    
+    // Redirect to dashboard page
+    res.send(`
+      <html>
+        <head>
+          <style>
+            body { background: #0f172a; color: #f8fafc; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+            h2 { color: #38bdf8; }
+            .spinner { width: 50px; height: 50px; border: 5px solid #1e293b; border-top-color: #38bdf8; border-radius: 50%; animation: spin 1s linear infinite; margin-top: 20px; }
+            @keyframes spin { to { transform: rotate(360deg); } }
+          </style>
+        </head>
+        <body>
+          <h2>Google Account Connected Successfully!</h2>
+          <p>Redirecting you back to the B2B dashboard...</p>
+          <div class="spinner"></div>
+          <script>
+            setTimeout(() => {
+              window.location.href = '/';
+            }, 2000);
+          </script>
+        </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('Google OAuth Callback Error:', err.message);
+    res.status(500).send(`OAuth callback error: ${err.message}`);
+  }
+});
+
+// Helper: Get fresh access token using refresh token if expired
+async function getFreshGoogleToken() {
+  const result = await pool.query("SELECT * FROM google_settings WHERE id = 'global'");
+  if (result.rows.length === 0 || !result.rows[0].access_token) {
+    throw new Error('Google integration not connected');
+  }
+  const row = result.rows[0];
+  const { client_id, client_secret, access_token, refresh_token, token_expiry } = row;
+  
+  if (token_expiry && new Date(token_expiry) > new Date(Date.now() + 60000)) {
+    return access_token;
+  }
+  
+  if (!refresh_token) {
+    throw new Error('Google access token expired and no refresh token available. Reconnect your account.');
+  }
+  
+  // Refresh token
+  const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id,
+      client_secret,
+      refresh_token,
+      grant_type: 'refresh_token'
+    })
+  });
+  
+  if (!refreshRes.ok) {
+    const errText = await refreshRes.text();
+    throw new Error(`Failed to refresh Google token: ${errText}`);
+  }
+  
+  const tokenData = await refreshRes.json();
+  const nextAccessToken = tokenData.access_token;
+  const expires_in = tokenData.expires_in || 3600;
+  const nextTokenExpiry = new Date(Date.now() + expires_in * 1000);
+  
+  await pool.query(`
+    UPDATE google_settings SET
+      access_token = $1,
+      token_expiry = $2
+    WHERE id = 'global'
+  `, [nextAccessToken, nextTokenExpiry]);
+  
+  return nextAccessToken;
+}
+
+// Create a new Google Form
+app.post('/api/google-forms/create', async (req, res) => {
+  try {
+    const { title, fields } = req.body;
+    if (!title || !fields || !Array.isArray(fields)) {
+      return res.status(400).json({ error: 'Missing form title or fields schema array' });
+    }
+    
+    const accessToken = await getFreshGoogleToken();
+    
+    // Step 1: Create a blank form
+    const createRes = await fetch('https://forms.googleapis.com/v1/forms', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        info: {
+          title: title,
+          documentTitle: title
+        }
+      })
+    });
+    
+    if (!createRes.ok) {
+      const errText = await createRes.text();
+      throw new Error(`Google Form creation failed: ${errText}`);
+    }
+    
+    const formData = await createRes.json();
+    const { formId, responderUri } = formData;
+    
+    // Step 2: Add question items to the Form in batchUpdate
+    const requests = fields.map((field, index) => {
+      return {
+        createItem: {
+          item: {
+            title: field.label,
+            // Store the field key in description so we can map it back during sync
+            description: `[Key: ${field.key}]`,
+            questionItem: {
+              question: {
+                required: field.required || false,
+                textQuestion: {} // Multi-line or text field
+              }
+            }
+          },
+          location: {
+            index: index
+          }
+        }
+      };
+    });
+    
+    const updateRes = await fetch(`https://forms.googleapis.com/v1/forms/${formId}:batchUpdate`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ requests })
+    });
+    
+    if (!updateRes.ok) {
+      const errText = await updateRes.text();
+      throw new Error(`Failed to populate Form questions: ${errText}`);
+    }
+    
+    // Step 3: Save Form to database
+    const dbRes = await pool.query(`
+      INSERT INTO google_forms (form_id, title, responder_uri)
+      VALUES ($1, $2, $3)
+      RETURNING *
+    `, [formId, title, responderUri]);
+    
+    res.json(dbRes.rows[0]);
+  } catch (err) {
+    console.error('Google Form Create Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// List all created Google Forms
+app.get('/api/google-forms/list', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM google_forms ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Sync responses for a Google Form
+app.post('/api/google-forms/sync', async (req, res) => {
+  const { formId } = req.body;
+  if (!formId) {
+    return res.status(400).json({ error: 'Missing formId parameter' });
+  }
+  
+  try {
+    const accessToken = await getFreshGoogleToken();
+    
+    // Step 1: Get form structure to identify question IDs and their descriptions ([Key: ...])
+    const formMetaRes = await fetch(`https://forms.googleapis.com/v1/forms/${formId}`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+    
+    if (!formMetaRes.ok) {
+      const errText = await formMetaRes.text();
+      throw new Error(`Failed to retrieve Form questions: ${errText}`);
+    }
+    
+    const formMeta = await formMetaRes.json();
+    const items = formMeta.items || [];
+    
+    // Map questionId -> fieldKey
+    const questionIdToKey = {};
+    items.forEach(item => {
+      if (item.questionItem && item.questionItem.question) {
+        const questionId = item.questionItem.question.questionId;
+        const desc = item.description || '';
+        const match = desc.match(/\[Key:\s*(.*?)\]/);
+        if (match) {
+          questionIdToKey[questionId] = match[1].trim();
+        } else {
+          // Fallback to title based slugs if description was altered
+          const slug = item.title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+          questionIdToKey[questionId] = slug;
+        }
+      }
+    });
+    
+    // Step 2: Fetch responses
+    const responsesRes = await fetch(`https://forms.googleapis.com/v1/forms/${formId}/responses`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+    
+    if (!responsesRes.ok) {
+      const errText = await responsesRes.text();
+      throw new Error(`Failed to retrieve Form responses: ${errText}`);
+    }
+    
+    const responsesData = await responsesRes.json();
+    const responses = responsesData.responses || [];
+    
+    let importedCount = 0;
+    
+    // Step 3: Parse and ingest submissions as leads
+    for (const resp of responses) {
+      const responseId = resp.responseId;
+      const lastSubmittedTime = resp.lastSubmittedTime;
+      const answers = resp.answers || {};
+      
+      // Determine leadId: check if response already ingested
+      const leadId = `google_form_${responseId}`;
+      const checkRes = await pool.query('SELECT lead_id FROM leads WHERE lead_id = $1', [leadId]);
+      if (checkRes.rows.length > 0) {
+        continue; // Already synced
+      }
+      
+      // Build lead values
+      const leadObj = {
+        leadId,
+        source: `Google Form Sub`
+      };
+      
+      Object.keys(answers).forEach(qId => {
+        const key = questionIdToKey[qId];
+        const textAnswers = answers[qId].textAnswers?.answers || [];
+        const val = textAnswers.map(a => a.value).join(', ');
+        if (key) {
+          leadObj[key] = val;
+        }
+      });
+      
+      // Extract properties
+      const name = leadObj.company || leadObj.name || 'Unknown';
+      const niche = leadObj.industry || leadObj.niche || null;
+      const city = leadObj.location || leadObj.city || null;
+      const website = leadObj.website || null;
+      const phone = leadObj.phone || null;
+      const email = leadObj.email || null;
+      
+      // Separate custom fields
+      const coreKeys = ['leadId', 'company', 'name', 'industry', 'niche', 'location', 'city', 'website', 'phone', 'email', 'source', 'lat', 'lng', 'ai_score', 'ai_grade', 'status', 'next_followup', 'timestamp', 'created_at', 'custom_fields'];
+      const customFields = {};
+      Object.keys(leadObj).forEach(key => {
+        if (!coreKeys.includes(key)) {
+          customFields[key] = leadObj[key];
+        }
+      });
+      
+      // Ingest lead (No AI auto-fill, missing fields remain NULL)
+      await pool.query(`
+        INSERT INTO leads (
+          lead_id, name, niche, city, website, phone, email, 
+          ai_score, ai_grade, ai_needs_website, ai_needs_marketing, 
+          ai_best_contact, ai_whatsapp_message, ai_email_subject, ai_recommended_service, ai_reason,
+          status, source, timestamp, lat, lng, next_followup, custom_fields
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, null, null, $10, null, null, null, null, $11, $12, $13, null, null, null, $14)
+      `, [
+        leadId, name, niche, city, website, phone, email,
+        null, null, phone ? 'Call' : (email ? 'Email' : 'Visit'),
+        'New', `Google Form: ${formMeta.info.title}`, new Date(lastSubmittedTime), JSON.stringify(customFields)
+      ]);
+      
+      // Ingest vector
+      await pool.query(`
+        INSERT INTO lead_vectors (
+          lead_id, business_name, city, niche, phone, website, 
+          ai_score, ai_grade, needs_website, needs_marketing, text_chunk, embedding, created_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, ARRAY_FILL(0::float, ARRAY[1024])::double precision[], $12)
+      `, [
+        leadId, name, city || 'N/A', niche || 'N/A', phone, website,
+        5, 'Warm', !website, true,
+        `Business Name: ${name}. Industry: ${niche || 'N/A'}. City: ${city || 'N/A'}. Score: N/A/10. Grade: Warm. Contact phone: ${phone || 'N/A'}. email: ${email || 'N/A'}. Source: Google Form.`,
+        new Date(lastSubmittedTime)
+      ]);
+      
+      importedCount++;
+    }
+    
+    // Update last synced timestamp
+    await pool.query(`
+      UPDATE google_forms SET last_synced_at = NOW() WHERE form_id = $1
+    `, [formId]);
+    
+    res.json({ message: `Successfully synced! Imported ${importedCount} new leads.`, count: importedCount });
+  } catch (err) {
+    console.error('Google Form Sync Error:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

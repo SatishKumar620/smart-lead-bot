@@ -228,6 +228,18 @@ const Dashboard = () => {
     }
   }, []);
 
+  // Fetch initial templates and integration config on mount
+  useEffect(() => {
+    fetchIngestTemplates();
+    fetchGoogleStatus();
+    fetchGoogleForms();
+  }, []);
+
+  // Keep googleFormFields in sync with ingestFields
+  useEffect(() => {
+    setGoogleFormFields(ingestFields.map(f => f.key));
+  }, [ingestFields]);
+
   // Poll notifications every 30s
   useEffect(() => {
     fetchNotifications();
@@ -329,6 +341,153 @@ const Dashboard = () => {
   const setQuickIngestForm = setIngestValues;
   const [quickIngestStatus, setQuickIngestStatus] = useState('');
   const [activeTooltip, setActiveTooltip] = useState(null);
+
+  // --- Ingest Templates States ---
+  const [ingestTemplates, setIngestTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('default');
+  const [newFieldName, setNewFieldName] = useState('');
+  const [newFieldLabel, setNewFieldLabel] = useState('');
+  const [newFieldType, setNewFieldType] = useState('text');
+  const [saveTemplateModalOpen, setSaveTemplateModalOpen] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+
+  // --- Google Forms Integration States ---
+  const [googleStatus, setGoogleStatus] = useState({ connected: false, configured: false });
+  const [googleForms, setGoogleForms] = useState([]);
+  const [googleClientConfig, setGoogleClientConfig] = useState({ client_id: '', client_secret: '', redirect_uri: '' });
+  const [newFormTitle, setNewFormTitle] = useState('');
+  const [formsSyncStatus, setFormsSyncStatus] = useState({});
+  const [googleConfigMessage, setGoogleConfigMessage] = useState('');
+  const [googleFormFields, setGoogleFormFields] = useState([]);
+  const [formCreateStatus, setFormCreateStatus] = useState('');
+
+  const fetchIngestTemplates = async () => {
+    try {
+      const res = await authenticatedFetch('/api/ingest-templates');
+      if (res.ok) setIngestTemplates(await res.json());
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchGoogleStatus = async () => {
+    try {
+      const res = await authenticatedFetch('/api/google/status');
+      if (res.ok) {
+        const data = await res.json();
+        setGoogleStatus(data);
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchGoogleForms = async () => {
+    try {
+      const res = await authenticatedFetch('/api/google-forms/list');
+      if (res.ok) setGoogleForms(await res.json());
+    } catch (e) { console.error(e); }
+  };
+
+  const saveGoogleCredentials = async (e) => {
+    e.preventDefault();
+    setGoogleConfigMessage('Saving...');
+    try {
+      const res = await authenticatedFetch('/api/google/save-credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(googleClientConfig)
+      });
+      if (res.ok) {
+        setGoogleConfigMessage('Credentials saved successfully.');
+        fetchGoogleStatus();
+      } else {
+        const err = await res.json();
+        setGoogleConfigMessage(err.error || 'Failed to save credentials.');
+      }
+    } catch (err) {
+      setGoogleConfigMessage('Network error. Try again.');
+    }
+  };
+
+  const handleConnectGoogle = async () => {
+    try {
+      const res = await authenticatedFetch('/api/google/auth-url');
+      if (res.ok) {
+        const data = await res.json();
+        window.location.href = data.url;
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Configure credentials first.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleCreateGoogleForm = async (e) => {
+    e.preventDefault();
+    if (!newFormTitle.trim()) {
+      alert("Please enter a title for the Google Form.");
+      return;
+    }
+    if (googleFormFields.length === 0) {
+      alert("Please select at least one field to include in the Google Form.");
+      return;
+    }
+    setFormCreateStatus('Creating form...');
+    try {
+      const fieldsPayload = googleFormFields.map(key => {
+        const found = ingestFields.find(f => f.key === key);
+        return found || { key, label: key, type: 'text', required: false };
+      });
+
+      const res = await authenticatedFetch('/api/google-forms/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newFormTitle,
+          fields: fieldsPayload
+        })
+      });
+      if (res.ok) {
+        setFormCreateStatus('Form created successfully!');
+        setNewFormTitle('');
+        fetchGoogleForms();
+        setTimeout(() => setFormCreateStatus(''), 3000);
+      } else {
+        const err = await res.json();
+        setFormCreateStatus(err.error || 'Failed to create form.');
+      }
+    } catch (err) {
+      setFormCreateStatus('Network error.');
+    }
+  };
+
+  const handleSyncGoogleForm = async (formId) => {
+    setFormsSyncStatus(prev => ({ ...prev, [formId]: 'Syncing...' }));
+    try {
+      const res = await authenticatedFetch('/api/google-forms/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ formId })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFormsSyncStatus(prev => ({ ...prev, [formId]: `Synced! ${data.message || ''}` }));
+        const dbResp = await authenticatedFetch('/api/leads');
+        if (dbResp.ok) setLeads(await dbResp.json());
+        setTimeout(() => {
+          setFormsSyncStatus(prev => {
+            const next = { ...prev };
+            delete next[formId];
+            return next;
+          });
+        }, 4000);
+      } else {
+        const err = await res.json();
+        setFormsSyncStatus(prev => ({ ...prev, [formId]: `Error: ${err.error || 'Failed'}` }));
+      }
+    } catch (err) {
+      setFormsSyncStatus(prev => ({ ...prev, [formId]: 'Network error.' }));
+    }
+  };
 
 
   // n8n Search Pipeline State
@@ -711,7 +870,8 @@ const Dashboard = () => {
       ai_score: lead.ai_score,
       ai_grade: lead.ai_grade,
       status: lead.status,
-      next_followup: lead.next_followup
+      next_followup: lead.next_followup,
+      custom_fields: lead.custom_fields || {}
     });
   };
 
@@ -924,19 +1084,29 @@ const Dashboard = () => {
           throw new Error("No leads extracted from file");
         }
 
-        const formattedData = parsedData.map(item => ({
-          company: item.company || item.name || item.Company || item.Name || 'Unknown Company',
-          industry: item.industry || item.niche || item.Industry || item.Niche || 'Other',
-          location: item.location || item.city || item.Location || item.City || 'Bangalore',
-          website: item.website || item.Website || '',
-          phone: item.phone || item.Phone || '',
-          email: item.email || item.Email || '',
-          ai_score: parseInt(item.ai_score || item.Score || 5),
-          ai_grade: item.ai_grade || item.Grade || (parseInt(item.ai_score || item.Score || 5) >= 8 ? 'Hot' : (parseInt(item.ai_score || item.Score || 5) >= 5 ? 'Warm' : 'Cold')),
-          status: item.status || item.Status || 'New',
-          next_followup: item.next_followup || item.NextFollowup || '',
-          source: 'Bulk File Upload'
-        }));
+        const formattedData = parsedData.map(item => {
+          const mapped = {
+            company: item.company || item.name || item.Company || item.Name || null,
+            industry: item.industry || item.niche || item.Industry || item.Niche || null,
+            location: item.location || item.city || item.Location || item.City || null,
+            website: item.website || item.Website || null,
+            phone: item.phone || item.Phone || null,
+            email: item.email || item.Email || null,
+            ai_score: item.ai_score !== undefined && item.ai_score !== '' ? parseInt(item.ai_score) : null,
+            ai_grade: item.ai_grade || item.Grade || null,
+            status: item.status || item.Status || 'New',
+            next_followup: item.next_followup || item.NextFollowup || null,
+            source: 'Bulk File Upload'
+          };
+          
+          const coreKeys = ['company', 'name', 'Company', 'Name', 'industry', 'niche', 'Industry', 'Niche', 'location', 'city', 'Location', 'City', 'website', 'Website', 'phone', 'Phone', 'email', 'Email', 'ai_score', 'Score', 'ai_grade', 'Grade', 'status', 'Status', 'next_followup', 'NextFollowup'];
+          for (const key in item) {
+            if (!coreKeys.includes(key)) {
+              mapped[key] = item[key] !== undefined && item[key] !== '' ? item[key] : null;
+            }
+          }
+          return mapped;
+        });
 
         const postResp = await authenticatedFetch('/api/leads', {
           method: 'POST',
@@ -1638,6 +1808,15 @@ const Dashboard = () => {
                 <button className={`db-nav-item ${activeTab === 'manage' ? 'active' : ''}`} onClick={() => setActiveTab('manage')}>
                   <NavIcon name="manage" />
                   Lead Directory
+                </button>
+                <button className={`db-nav-item ${activeTab === 'integrations' ? 'active' : ''}`} onClick={() => setActiveTab('integrations')}>
+                  <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+                    <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                    <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                    <line x1="6" y1="6" x2="6.01" y2="6"/>
+                    <line x1="6" y1="18" x2="6.01" y2="18"/>
+                  </svg>
+                  Integrations
                 </button>
                 <button className={`db-nav-item ${activeTab === 'tasks' ? 'active' : ''}`} onClick={() => setActiveTab('tasks')}>
                   <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2536,6 +2715,59 @@ const Dashboard = () => {
                   <span style={{ fontSize: '10px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Manual Single Record — Admin Only</span>
                 </div>
 
+                {/* Ingestion template selector */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: '11px', color: 'var(--fog)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Ingestion Template:</label>
+                  <select
+                    className="finder-input"
+                    style={{ width: 'auto', padding: '6px 12px', fontSize: '12px', background: 'var(--ink3)', color: 'var(--cream)', border: '1px solid var(--line)', borderRadius: '6px' }}
+                    value={selectedTemplateId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedTemplateId(val);
+                      if (val === 'default') {
+                        setIngestFields(DEFAULT_INGEST_FIELDS);
+                        setIngestValues({});
+                      } else {
+                        const found = ingestTemplates.find(t => String(t.id) === String(val));
+                        if (found) {
+                          setIngestFields(found.fields);
+                          setIngestValues({});
+                        }
+                      }
+                    }}
+                  >
+                    <option value="default">Default Form</option>
+                    {ingestTemplates.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  {selectedTemplateId !== 'default' && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (window.confirm("Are you sure you want to delete this template?")) {
+                          try {
+                            const res = await authenticatedFetch(`/api/ingest-templates/${selectedTemplateId}`, {
+                              method: 'DELETE'
+                            });
+                            if (res.ok) {
+                              setSelectedTemplateId('default');
+                              setIngestFields(DEFAULT_INGEST_FIELDS);
+                              fetchIngestTemplates();
+                            }
+                          } catch (e) {
+                            console.error(e);
+                          }
+                        }
+                      }}
+                      style={{ padding: '6px 10px', fontSize: '11px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', borderRadius: '6px', cursor: 'pointer' }}
+                    >
+                      Delete Template
+                    </button>
+                  )}
+                </div>
+
                 {/* Field manager toolbar */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '11px', color: 'var(--fog)' }}>Active fields: <strong style={{ color: 'var(--cream)' }}>{ingestFields.length}</strong></span>
@@ -2546,45 +2778,119 @@ const Dashboard = () => {
                       style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', fontSize: '11px', background: 'rgba(232,150,42,0.1)', border: '1px solid rgba(232,150,42,0.35)', color: 'var(--gold)', borderRadius: '7px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                      Add Field
+                      Add Custom Field
                     </button>
                     {ingestFieldPickerOpen && (
-                      <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 200, background: 'var(--ink2)', border: '1px solid var(--line)', borderRadius: '10px', minWidth: '220px', boxShadow: '0 16px 40px rgba(0,0,0,0.4)', overflow: 'hidden' }}>
-                        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--line)', fontSize: '11px', color: 'var(--fog)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Pick a field to add</div>
-                        <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
-                          {FIELD_CATALOG.filter(fc => !ingestFields.find(f => f.key === fc.key)).map(fc => (
-                            <button
-                              key={fc.key}
-                              type="button"
-                              onClick={() => {
-                                setIngestFields(prev => [...prev, { ...fc, required: false }]);
-                                setIngestFieldPickerOpen(false);
-                              }}
-                              style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '2px', padding: '10px 14px', background: 'none', border: 'none', borderBottom: '1px solid var(--line)', cursor: 'pointer', textAlign: 'left' }}
-                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-                              onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                            >
-                              <span style={{ fontSize: '12px', color: 'var(--cream)', fontWeight: 600 }}>{fc.label}</span>
-                              <span style={{ fontSize: '10px', color: 'var(--fog)' }}>{fc.type} · {fc.key}</span>
-                            </button>
-                          ))}
-                          {FIELD_CATALOG.filter(fc => !ingestFields.find(f => f.key === fc.key)).length === 0 && (
-                            <div style={{ padding: '16px 14px', fontSize: '12px', color: 'var(--fog)', textAlign: 'center' }}>All available fields already added.</div>
-                          )}
+                      <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 200, background: 'var(--ink2)', border: '1px solid var(--line)', borderRadius: '10px', width: '280px', padding: '16px', boxShadow: '0 16px 40px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ fontSize: '11px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600, borderBottom: '1px solid var(--line)', paddingBottom: '6px' }}>Create Custom Field</div>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <label style={{ fontSize: '10px', color: 'var(--fog)', textTransform: 'uppercase' }}>Field Label</label>
+                          <input
+                            type="text"
+                            className="finder-input"
+                            placeholder="e.g. GST ID"
+                            value={newFieldLabel}
+                            onChange={e => {
+                              setNewFieldLabel(e.target.value);
+                              const derivedKey = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_');
+                              setNewFieldName(derivedKey);
+                            }}
+                            style={{ padding: '6px 10px', fontSize: '12px' }}
+                          />
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setIngestFieldPickerOpen(false)}
-                          style={{ width: '100%', padding: '8px', fontSize: '11px', background: 'none', border: 'none', borderTop: '1px solid var(--line)', color: 'var(--fog)', cursor: 'pointer' }}
-                        >Cancel</button>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <label style={{ fontSize: '10px', color: 'var(--fog)', textTransform: 'uppercase' }}>Field Key</label>
+                          <input
+                            type="text"
+                            className="finder-input"
+                            placeholder="e.g. gst_id"
+                            value={newFieldName}
+                            onChange={e => setNewFieldName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                            style={{ padding: '6px 10px', fontSize: '12px' }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <label style={{ fontSize: '10px', color: 'var(--fog)', textTransform: 'uppercase' }}>Data Type</label>
+                          <select
+                            className="finder-input"
+                            value={newFieldType}
+                            onChange={e => setNewFieldType(e.target.value)}
+                            style={{ padding: '6px 10px', fontSize: '12px' }}
+                          >
+                            <option value="text">Text</option>
+                            <option value="number">Number</option>
+                            <option value="url">URL</option>
+                            <option value="email">Email</option>
+                            <option value="date">Date</option>
+                          </select>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '4px 0' }}>
+                          <input
+                            type="checkbox"
+                            id="custom-field-required"
+                            style={{ accentColor: 'var(--gold)' }}
+                            onChange={(e) => {
+                              window.newFieldRequired = e.target.checked;
+                            }}
+                          />
+                          <label htmlFor="custom-field-required" style={{ fontSize: '11px', color: 'var(--cream)', cursor: 'pointer' }}>Required Field</label>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!newFieldName.trim() || !newFieldLabel.trim()) {
+                                alert("Please specify a field label and key.");
+                                return;
+                              }
+                              if (ingestFields.find(f => f.key === newFieldName)) {
+                                alert("A field with this key already exists.");
+                                return;
+                              }
+                              const newF = {
+                                key: newFieldName,
+                                label: newFieldLabel,
+                                type: newFieldType,
+                                required: !!window.newFieldRequired,
+                                placeholder: `Enter ${newFieldLabel}`
+                              };
+                              setIngestFields(prev => [...prev, newF]);
+                              setNewFieldName('');
+                              setNewFieldLabel('');
+                              setNewFieldType('text');
+                              window.newFieldRequired = false;
+                              setIngestFieldPickerOpen(false);
+                            }}
+                            style={{ flex: 1, padding: '8px', fontSize: '11px', background: 'rgba(232,150,42,0.2)', border: '1px solid var(--gold)', color: 'var(--gold)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                          >
+                            Create Field
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIngestFieldPickerOpen(false)}
+                            style={{ padding: '8px 12px', fontSize: '11px', background: 'none', border: '1px solid var(--line)', color: 'var(--fog)', borderRadius: '6px', cursor: 'pointer' }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
                   <button
                     type="button"
-                    onClick={() => { setIngestFields(DEFAULT_INGEST_FIELDS); setIngestValues({}); }}
+                    onClick={() => { setIngestFields(DEFAULT_INGEST_FIELDS); setIngestValues({}); setSelectedTemplateId('default'); }}
                     style={{ padding: '6px 12px', fontSize: '11px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--fog)', borderRadius: '7px', cursor: 'pointer' }}
                   >Reset</button>
+                  <button
+                    type="button"
+                    onClick={() => setSaveTemplateModalOpen(true)}
+                    style={{ padding: '6px 12px', fontSize: '11px', background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc', borderRadius: '7px', cursor: 'pointer' }}
+                  >Save as Template</button>
                 </div>
 
                 {/* Dynamic form grid */}
@@ -2873,6 +3179,31 @@ const Dashboard = () => {
                                     value={editForm.website || ''} 
                                     onChange={e => setEditForm({ ...editForm, website: e.target.value })}
                                   />
+                                  {editForm.custom_fields && Object.keys(editForm.custom_fields).length > 0 && (
+                                    <div style={{ marginTop: '8px', borderTop: '1px solid var(--line)', paddingTop: '6px' }}>
+                                      <div style={{ fontSize: '9px', color: 'var(--gold)', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 600 }}>Custom Fields</div>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        {Object.keys(editForm.custom_fields).map(key => (
+                                          <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                            <span style={{ fontSize: '9px', color: 'var(--fog)' }}>{key}</span>
+                                            <input 
+                                              type="text" 
+                                              className="finder-input" 
+                                              style={{ padding: '4px 8px', fontSize: '11px', width: '100%' }}
+                                              value={editForm.custom_fields[key] || ''} 
+                                              onChange={e => setEditForm({
+                                                ...editForm,
+                                                custom_fields: {
+                                                  ...editForm.custom_fields,
+                                                  [key]: e.target.value
+                                                }
+                                              })}
+                                            />
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
                                 </td>
                                 {/* Edit Niche/City */}
                                 <td>
@@ -2976,6 +3307,17 @@ const Dashboard = () => {
                                     <a href={lead.website} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold)', fontSize: '11px', textDecoration: 'none' }}>{lead.website}</a>
                                   ) : (
                                     <span style={{ color: 'var(--mist)', fontSize: '11px' }}>No website</span>
+                                  )}
+                                  {lead.custom_fields && Object.keys(lead.custom_fields).length > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
+                                      {Object.entries(lead.custom_fields).map(([k, v]) => (
+                                        v !== null && v !== undefined && v !== '' ? (
+                                          <span key={k} style={{ fontSize: '9px', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--line)', padding: '2px 6px', borderRadius: '4px', color: 'var(--fog)' }}>
+                                            <strong>{k}:</strong> {String(v)}
+                                          </span>
+                                        ) : null
+                                      ))}
+                                    </div>
                                   )}
                                 </td>
                                 {/* Read Mode Niche/City */}
@@ -3148,7 +3490,340 @@ const Dashboard = () => {
                   </div>
                 )}
               </div>
+
+              {saveTemplateModalOpen && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
+                  <div style={{ background: 'var(--ink2)', border: '1px solid var(--line)', borderRadius: '12px', padding: '24px', width: '360px', boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}>
+                    <div style={{ fontSize: '15px', color: 'var(--cream)', fontWeight: 700, marginBottom: '8px' }}>Save Ingestion Template</div>
+                    <p style={{ fontSize: '12px', color: 'var(--fog)', marginBottom: '16px' }}>Provide a name for this custom template. It will store the current fields configuration.</p>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '20px' }}>
+                      <label style={{ fontSize: '10px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Template Name</label>
+                      <input
+                        type="text"
+                        className="finder-input"
+                        placeholder="e.g. Real Estate Leads"
+                        value={newTemplateName}
+                        onChange={e => setNewTemplateName(e.target.value)}
+                        style={{ padding: '8px 12px', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                      <button
+                        type="button"
+                        onClick={() => { setSaveTemplateModalOpen(false); setNewTemplateName(''); }}
+                        style={{ padding: '8px 16px', background: 'none', border: '1px solid var(--line)', color: 'var(--fog)', borderRadius: '8px', cursor: 'pointer', fontSize: '12px' }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!newTemplateName.trim()) {
+                            alert("Please enter a template name.");
+                            return;
+                          }
+                          try {
+                            const res = await authenticatedFetch('/api/ingest-templates', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                name: newTemplateName,
+                                fields: ingestFields
+                              })
+                            });
+                            if (res.ok) {
+                              alert("Template saved successfully.");
+                              setSaveTemplateModalOpen(false);
+                              setNewTemplateName('');
+                              fetchIngestTemplates();
+                            } else {
+                              const err = await res.json();
+                              alert(err.error || "Failed to save template.");
+                            }
+                          } catch (e) {
+                            console.error(e);
+                          }
+                        }}
+                        style={{ padding: '8px 16px', background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.4)', color: '#c084fc', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}
+                      >
+                        Save Template
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
+          );
+        })()}
+
+        {activeTab === 'integrations' && (() => {
+          return (
+            <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              
+              {/* HEADER */}
+              <div style={{ marginBottom: '8px' }}>
+                <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--cream)', margin: '0 0 4px 0' }}>Google Forms & Sync Settings</h1>
+                <p style={{ fontSize: '13px', color: 'var(--fog)', margin: 0 }}>Configure Google Client Credentials, authenticate via OAuth, and sync your form submissions as leads.</p>
+              </div>
+
+              {/* GRID */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                
+                {/* COLUMN 1: OAuth & Credentials Settings */}
+                <div className="nlp-console-card">
+                  <div className="db-card-title-wrap" style={{ marginBottom: '16px' }}>
+                    <span className="db-card-title">1. Google OAuth Setup</span>
+                    <span style={{ fontSize: '10px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Google OAuth 2.0 Credentials API</span>
+                  </div>
+
+                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--line)', padding: '14px', borderRadius: '8px', fontSize: '12px', color: 'var(--mist)', lineHeight: '1.6', marginBottom: '20px' }}>
+                    <strong style={{ color: 'var(--gold)', display: 'block', marginBottom: '6px' }}>Instruction Details:</strong>
+                    Go to the <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold)', textDecoration: 'underline' }}>Google Cloud Console</a>, create a project, enable the <strong>Google Forms API</strong>, and create an OAuth 2.0 Client ID. 
+                    <br />
+                    Add this callback URL to your <strong>Authorized Redirect URIs</strong>:
+                    <div style={{ margin: '8px 0', padding: '6px 10px', background: 'rgba(7,8,10,0.4)', border: '1px solid var(--line)', borderRadius: '6px', fontFamily: 'monospace', fontSize: '11px', color: 'var(--cream)', wordBreak: 'break-all' }}>
+                      {window.location.origin}/api/auth/google/callback
+                    </div>
+                  </div>
+
+                  <form onSubmit={saveGoogleCredentials} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Google Client ID</label>
+                      <input
+                        type="text"
+                        className="finder-input"
+                        required
+                        placeholder="Paste Client ID here..."
+                        value={googleClientConfig.client_id}
+                        onChange={e => setGoogleClientConfig({ ...googleClientConfig, client_id: e.target.value })}
+                        style={{ padding: '9px 12px', fontSize: '12px' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Google Client Secret</label>
+                      <input
+                        type="password"
+                        className="finder-input"
+                        required
+                        placeholder="Paste Client Secret here..."
+                        value={googleClientConfig.client_secret}
+                        onChange={e => setGoogleClientConfig({ ...googleClientConfig, client_secret: e.target.value })}
+                        style={{ padding: '9px 12px', fontSize: '12px' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Redirect URI</label>
+                      <input
+                        type="text"
+                        className="finder-input"
+                        required
+                        placeholder="e.g. http://localhost:5000/api/auth/google/callback"
+                        value={googleClientConfig.redirect_uri || `${window.location.origin}/api/auth/google/callback`}
+                        onChange={e => setGoogleClientConfig({ ...googleClientConfig, redirect_uri: e.target.value })}
+                        style={{ padding: '9px 12px', fontSize: '12px' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '6px' }}>
+                      <button type="submit" style={{ padding: '10px 20px', fontSize: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--cream)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>
+                        Save Credentials
+                      </button>
+                      {googleConfigMessage && (
+                        <span style={{ fontSize: '11px', color: googleConfigMessage.includes('success') ? '#4ade80' : 'var(--gold)' }}>
+                          {googleConfigMessage}
+                        </span>
+                      )}
+                    </div>
+                  </form>
+
+                  {/* OAuth status panel */}
+                  <div style={{ borderTop: '1px solid var(--line)', marginTop: '24px', paddingTop: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                      <div>
+                        <div style={{ fontSize: '11px', color: 'var(--fog)', textTransform: 'uppercase' }}>OAuth Status</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: googleStatus.connected ? '#4ade80' : '#ef4444', display: 'inline-block' }}></span>
+                          <span style={{ fontSize: '13px', color: 'var(--cream)', fontWeight: 600 }}>
+                            {googleStatus.connected ? `Connected (${googleStatus.email || 'Google Account'})` : 'Not Connected'}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleConnectGoogle}
+                        disabled={!googleStatus.configured}
+                        style={{
+                          padding: '10px 24px',
+                          fontSize: '12px',
+                          background: 'rgba(232,150,42,0.15)',
+                          border: '1px solid rgba(232,150,42,0.4)',
+                          color: 'var(--gold)',
+                          borderRadius: '8px',
+                          cursor: googleStatus.configured ? 'pointer' : 'not-allowed',
+                          opacity: googleStatus.configured ? 1 : 0.5,
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          letterSpacing: '.06em',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                        {googleStatus.connected ? 'Reconnect' : 'Connect with Google'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* COLUMN 2: Google Form Creator & Management */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                  
+                  {/* Form Creator */}
+                  <div className="nlp-console-card">
+                    <div className="db-card-title-wrap" style={{ marginBottom: '16px' }}>
+                      <span className="db-card-title">2. Google Form Creator</span>
+                      <span style={{ fontSize: '10px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Deploy custom web surveys</span>
+                    </div>
+
+                    <form onSubmit={handleCreateGoogleForm} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Form Title</label>
+                        <input
+                          type="text"
+                          className="finder-input"
+                          required
+                          disabled={!googleStatus.connected}
+                          placeholder="e.g. Lead Ingest Survey Form"
+                          value={newFormTitle}
+                          onChange={e => setNewFormTitle(e.target.value)}
+                          style={{ padding: '9px 12px', fontSize: '12px' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Check fields to include</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '12px', background: 'rgba(7,8,10,0.3)', border: '1px solid var(--line)', borderRadius: '8px', maxHeight: '180px', overflowY: 'auto' }}>
+                          {ingestFields.map(f => (
+                            <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--cream)', cursor: googleStatus.connected ? 'pointer' : 'not-allowed', opacity: googleStatus.connected ? 1 : 0.6 }}>
+                              <input
+                                type="checkbox"
+                                style={{ accentColor: 'var(--gold)', cursor: googleStatus.connected ? 'pointer' : 'default' }}
+                                disabled={!googleStatus.connected}
+                                checked={googleFormFields.includes(f.key)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setGoogleFormFields(prev => [...prev, f.key]);
+                                  } else {
+                                    setGoogleFormFields(prev => prev.filter(k => k !== f.key));
+                                  }
+                                }}
+                              />
+                              <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                                {f.label} {f.required && <span style={{ color: 'var(--gold)' }}>*</span>}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '4px' }}>
+                        <button
+                          type="submit"
+                          disabled={!googleStatus.connected || formCreateStatus.includes('Creating')}
+                          style={{
+                            padding: '10px 24px',
+                            fontSize: '12px',
+                            background: 'rgba(168,85,247,0.15)',
+                            border: '1px solid rgba(168,85,247,0.4)',
+                            color: '#c084fc',
+                            borderRadius: '8px',
+                            cursor: googleStatus.connected ? 'pointer' : 'not-allowed',
+                            opacity: googleStatus.connected ? 1 : 0.5,
+                            fontWeight: 600,
+                            textTransform: 'uppercase'
+                          }}
+                        >
+                          {formCreateStatus.includes('Creating') ? 'Creating...' : 'Create Form 🚀'}
+                        </button>
+                        {formCreateStatus && (
+                          <span style={{ fontSize: '11px', color: formCreateStatus.includes('success') ? '#4ade80' : 'var(--gold)' }}>
+                            {formCreateStatus}
+                          </span>
+                        )}
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Active Google Forms List */}
+                  <div className="nlp-console-card" style={{ flex: 1 }}>
+                    <div className="db-card-title-wrap" style={{ marginBottom: '16px' }}>
+                      <span className="db-card-title">3. Form Synchronization Terminal</span>
+                      <span style={{ fontSize: '10px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Sync responses to leads database</span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '280px', overflowY: 'auto' }}>
+                      {googleForms.map(form => (
+                        <div key={form.form_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--line)', padding: '12px 16px', borderRadius: '8px', gap: '16px' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: '13px', color: 'var(--cream)', fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{form.title}</div>
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '4px', alignItems: 'center' }}>
+                              <a href={form.responder_uri} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: 'var(--gold)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                View Form 
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                              </a>
+                              {form.last_synced_at && (
+                                <span style={{ fontSize: '10px', color: 'var(--fog)' }}>
+                                  Last Synced: {new Date(form.last_synced_at).toLocaleTimeString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {formsSyncStatus[form.form_id] && (
+                              <span style={{ fontSize: '11px', color: 'var(--gold)' }}>
+                                {formsSyncStatus[form.form_id]}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleSyncGoogleForm(form.form_id)}
+                              disabled={formsSyncStatus[form.form_id] === 'Syncing...'}
+                              style={{
+                                padding: '8px 14px',
+                                fontSize: '11px',
+                                background: 'rgba(255,255,255,0.04)',
+                                border: '1px solid var(--line)',
+                                color: 'var(--cream)',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                fontWeight: 600
+                              }}
+                            >
+                              Sync Now ↺
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {googleForms.length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--fog)', fontSize: '12px' }}>
+                          No active Google Forms created yet. Create a form above to enable syncing.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
           );
         })()}
 
