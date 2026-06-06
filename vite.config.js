@@ -1021,14 +1021,82 @@ export default defineConfig({
                   if (!n8nSuccess) {
                     // ── DIRECT LEAD FINDER RESILIENT FALLBACK (Same as server.js) ──
                     const cleanNiche = nicheVal.replace(/leads|companies|company|services|service|businesses|business/gi, "").trim();
-                    let nicheRegex = cleanNiche;
-                    if (cleanNiche.includes("it") || cleanNiche.includes("software") || cleanNiche.includes("tech") || cleanNiche.includes("computer")) {
-                      nicheRegex = "it|software|tech|computer|developer|systems|consulting";
-                    } else if (cleanNiche.includes("restaurant") || cleanNiche.includes("food") || cleanNiche.includes("cafe")) {
-                      nicheRegex = "restaurant|cafe|food|canteen|bakery|diner|sweet";
-                    } else if (cleanNiche.includes("salon") || cleanNiche.includes("spa") || cleanNiche.includes("beauty") || cleanNiche.includes("hair")) {
-                      nicheRegex = "salon|spa|beauty|hair|parlour";
-                    }
+
+                    // Semantic Overpass filter builder (mirrors server.js)
+                    const buildOverpassFilters = (niche) => {
+                      const n = niche.toLowerCase();
+                      if (n.includes('hotel') || n.includes('resort') || n.includes('hostel') || n.includes('lodge')) {
+                        return [
+                          `node[tourism=hotel](around:RADIUS,LAT,LNG)`,
+                          `node[tourism=motel](around:RADIUS,LAT,LNG)`,
+                          `node[tourism=guest_house](around:RADIUS,LAT,LNG)`,
+                          `node[tourism=hostel](around:RADIUS,LAT,LNG)`,
+                          `way[tourism=hotel](around:RADIUS,LAT,LNG)`,
+                          `way[tourism=motel](around:RADIUS,LAT,LNG)`
+                        ];
+                      }
+                      if (n.includes('restaurant') || n.includes('food') || n.includes('cafe') || n.includes('diner') || n.includes('eatery')) {
+                        return [
+                          `node[amenity=restaurant](around:RADIUS,LAT,LNG)`,
+                          `node[amenity=cafe](around:RADIUS,LAT,LNG)`,
+                          `node[amenity=fast_food](around:RADIUS,LAT,LNG)`,
+                          `node[amenity=bar](around:RADIUS,LAT,LNG)`,
+                          `way[amenity=restaurant](around:RADIUS,LAT,LNG)`
+                        ];
+                      }
+                      if (n.includes('salon') || n.includes('beauty') || n.includes('spa') || n.includes('hair')) {
+                        return [
+                          `node[shop=hairdresser](around:RADIUS,LAT,LNG)`,
+                          `node[shop=beauty](around:RADIUS,LAT,LNG)`,
+                          `node[leisure=spa](around:RADIUS,LAT,LNG)`,
+                          `node[amenity=beauty](around:RADIUS,LAT,LNG)`
+                        ];
+                      }
+                      if (n.includes('gym') || n.includes('fitness') || n.includes('yoga') || n.includes('sport')) {
+                        return [
+                          `node[leisure=fitness_centre](around:RADIUS,LAT,LNG)`,
+                          `node[leisure=sports_centre](around:RADIUS,LAT,LNG)`,
+                          `node[amenity=gym](around:RADIUS,LAT,LNG)`
+                        ];
+                      }
+                      if (n.includes('it') || n.includes('software') || n.includes('tech') || n.includes('computer')) {
+                        return [
+                          `node[office=it](around:RADIUS,LAT,LNG)`,
+                          `node[office=software](around:RADIUS,LAT,LNG)`,
+                          `node[office=company][name~"tech|software|systems|digital|solutions",i](around:RADIUS,LAT,LNG)`,
+                          `node[shop=computer](around:RADIUS,LAT,LNG)`
+                        ];
+                      }
+                      if (n.includes('hospital') || n.includes('clinic') || n.includes('medical') || n.includes('doctor') || n.includes('health')) {
+                        return [
+                          `node[amenity=hospital](around:RADIUS,LAT,LNG)`,
+                          `node[amenity=clinic](around:RADIUS,LAT,LNG)`,
+                          `node[amenity=doctors](around:RADIUS,LAT,LNG)`,
+                          `node[amenity=pharmacy](around:RADIUS,LAT,LNG)`,
+                          `way[amenity=hospital](around:RADIUS,LAT,LNG)`
+                        ];
+                      }
+                      if (n.includes('school') || n.includes('college') || n.includes('education') || n.includes('institute') || n.includes('academy')) {
+                        return [
+                          `node[amenity=school](around:RADIUS,LAT,LNG)`,
+                          `node[amenity=college](around:RADIUS,LAT,LNG)`,
+                          `node[amenity=university](around:RADIUS,LAT,LNG)`,
+                          `way[amenity=school](around:RADIUS,LAT,LNG)`
+                        ];
+                      }
+                      if (n.includes('shop') || n.includes('store') || n.includes('retail')) {
+                        return [
+                          `node[shop](around:RADIUS,LAT,LNG)`,
+                          `way[shop](around:RADIUS,LAT,LNG)`
+                        ];
+                      }
+                      return [
+                        `node[office=company][name~"${niche}",i](around:RADIUS,LAT,LNG)`,
+                        `node[name~"${niche}",i](around:RADIUS,LAT,LNG)`,
+                        `way[name~"${niche}",i](around:RADIUS,LAT,LNG)`
+                      ];
+                    };
+                    const overpassFilters = buildOverpassFilters(cleanNiche);
 
                     let lat = 12.9716;
                     let lng = 77.5946;
@@ -1066,69 +1134,66 @@ export default defineConfig({
                     let elements = [];
                     try {
                       const radiusMeters = 15000;
-                      const overpassQuery = `[out:json][timeout:25];(node[~"office|shop|amenity|name|craft|industrial"~"${nicheRegex}",i](around:${radiusMeters},${lat},${lng});way[~"office|shop|amenity|name|craft|industrial"~"${nicheRegex}",i](around:${radiusMeters},${lat},${lng}););out center ${limitVal};`;
+                      const filterLines = overpassFilters
+                        .map(f => f.replace(/RADIUS/g, radiusMeters).replace(/LAT/g, lat).replace(/LNG/g, lng))
+                        .join(';\n');
+                      const overpassQuery = '[out:json][timeout:30];(\n' + filterLines + ';\n);out center ' + (limitVal * 3) + ';';
                       const overpassUrl = `https://lz4.overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
-                      const overpassResp = await fetch(overpassUrl);
+                      const overpassResp = await fetch(overpassUrl, { signal: AbortSignal.timeout(12000) });
                       if (overpassResp.ok) {
                         const overpassData = await overpassResp.json();
                         elements = overpassData.elements || [];
+                        console.log(`[Vite Dev] Overpass returned ${elements.length} elements for "${cleanNiche}"`);
                       }
                     } catch (overpassErr) {
                       console.warn('Overpass API query failed in Vite Dev:', overpassErr.message);
                     }
 
+                    // Merge OSM + Wikipedia, deduplicate by normalised name
+                    const seenNames = new Set();
+                    const normName = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
                     const mergedList = [];
-                    realCompanies.forEach((company, index) => {
+                    const rejectTypes = ['railway', 'bus_stop', 'fuel', 'atm', 'bank', 'parking', 'toilets', 'waste', 'bench'];
+
+                    // OSM first — real coords, phone, website
+                    elements.forEach(el => {
+                      const name = el.tags?.name || el.tags?.brand;
+                      if (!name) return;
+                      const key = normName(name);
+                      if (seenNames.has(key)) return;
+                      seenNames.add(key);
+                      const osmCat = el.tags?.tourism || el.tags?.amenity || el.tags?.shop || el.tags?.office || el.tags?.leisure || cleanNiche;
+                      if (rejectTypes.includes(osmCat)) return;
                       mergedList.push({
-                        id: 'WIKI-' + index + '-' + Date.now(),
-                        name: company,
-                        lat: lat + (Math.sin(index) * 0.005),
-                        lng: lng + (Math.cos(index) * 0.005),
-                        website: `https://${company.toLowerCase().replace(/[^a-z0-9]/g, '')}.in`,
-                        phone: '',
-                        category: cleanNiche
+                        id: 'OSM-' + el.id,
+                        name,
+                        lat: el.lat || el.center?.lat || lat,
+                        lng: el.lon || el.center?.lon || lng,
+                        website: el.tags?.website || el.tags?.url || el.tags?.['contact:website'] || '',
+                        phone: el.tags?.phone || el.tags?.['contact:phone'] || el.tags?.['contact:mobile'] || '',
+                        email: el.tags?.email || el.tags?.['contact:email'] || '',
+                        category: osmCat
                       });
                     });
 
-                    elements.forEach(el => {
-                      const name = el.tags?.name || el.tags?.brand;
-                      if (name && !mergedList.some(m => m.name.toLowerCase() === name.toLowerCase())) {
-                        mergedList.push({
-                          id: String(el.id),
-                          name: name,
-                          lat: el.lat || el.center?.lat || lat,
-                          lng: el.lon || el.center?.lon || lng,
-                          website: el.tags?.website || el.tags?.url || '',
-                          phone: el.tags?.phone || el.tags?.['contact:phone'] || '',
-                          category: el.tags?.office || el.tags?.shop || el.tags?.amenity || cleanNiche
-                        });
-                      }
+                    // Wikipedia — company-level names
+                    realCompanies.forEach((company, index) => {
+                      const key = normName(company);
+                      if (seenNames.has(key)) return;
+                      seenNames.add(key);
+                      mergedList.push({
+                        id: 'WIKI-' + index,
+                        name: company,
+                        lat: lat + (Math.sin(index * 1.7) * 0.012),
+                        lng: lng + (Math.cos(index * 1.7) * 0.012),
+                        website: '',
+                        phone: '',
+                        email: '',
+                        category: cleanNiche
+                      });
                     });
-
-                    if (mergedList.length < limitVal) {
-                      const needed = limitVal - mergedList.length;
-                      let prefixes = ["Universal", "Global", "Elite", "Prime", "Royal", "Apex", "Nova", "Infinity", "Vibrant"];
-                      let suffixes = ["Solutions", "Hub", "Center", "Studio", "Labs", "Point", "Co", "Group", "Zone"];
-                      if (cleanNiche.includes("it") || cleanNiche.includes("software") || cleanNiche.includes("tech")) {
-                        prefixes = ["Sys", "Quantum", "Cyber", "Pixel", "Logic", "Dev", "Alpha", "Cloud", "Nexus"];
-                        suffixes = ["Labs", "Systems", "Technologies", "Digital", "Consulting", "Solutions", "Tech"];
-                      } else if (cleanNiche.includes("restaurant") || cleanNiche.includes("food") || cleanNiche.includes("cafe")) {
-                        prefixes = ["Spice", "Curry", "Tandoor", "Biryani", "Taste", "Swad", "Zaika", "Royal", "Desi"];
-                        suffixes = ["Kitchen", "Restaurant", "Cafe", "Bistro", "Diner", "Corner", "Eatery", "Foods"];
-                      }
-                      for (let i = 0; i < needed; i++) {
-                        const brandName = prefixes[(mergedList.length + i) % prefixes.length] + " " + suffixes[Math.floor((mergedList.length + i + 2) * 7) % suffixes.length];
-                        mergedList.push({
-                          id: 'FILL-' + i + '-' + Date.now(),
-                          name: brandName,
-                          lat: lat + (Math.sin(mergedList.length + i) * 0.008),
-                          lng: lng + (Math.cos(mergedList.length + i) * 0.008),
-                          website: `https://${brandName.toLowerCase().replace(/[^a-z0-9]/g, '')}.in`,
-                          phone: `+91 9${Math.floor(100000000 + Math.random() * 900000000)}`,
-                          category: cleanNiche
-                        });
-                      }
-                    }
+                    console.log(`[Vite Dev] Merged ${mergedList.length} unique leads for "${cleanNiche}" in ${cityVal}`);
+                    // No filler — only real data
 
                     const finalLeads = mergedList.slice(0, limitVal);
                     const groqKey = getGroqApiKey();
@@ -1213,7 +1278,9 @@ export default defineConfig({
                         }
                         
                         const nextFollowup = new Date(Date.now() + followUpDays * 86400000).toISOString().split('T')[0];
-                        
+                        // Stable lead_id = normalised(name) + _ + normalised(city) — prevents duplicates across runs
+                        const stableId = `${item.name.toLowerCase().replace(/[^a-z0-9]/g, '')}_${cityVal.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+
                         try {
                           await pool.query(`
                             INSERT INTO leads (
@@ -1224,18 +1291,23 @@ export default defineConfig({
                             )
                             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
                             ON CONFLICT (lead_id) DO UPDATE SET
-                              name = EXCLUDED.name, website = EXCLUDED.website, phone = EXCLUDED.phone, email = EXCLUDED.email,
-                              ai_score = EXCLUDED.ai_score, ai_grade = EXCLUDED.ai_grade,
-                              ai_whatsapp_message = EXCLUDED.ai_whatsapp_message, ai_email_subject = EXCLUDED.ai_email_subject,
-                              ai_recommended_service = EXCLUDED.ai_recommended_service, ai_reason = EXCLUDED.ai_reason,
-                              next_followup = EXCLUDED.next_followup
+                              website = COALESCE(NULLIF(EXCLUDED.website,''), leads.website),
+                              phone   = COALESCE(NULLIF(EXCLUDED.phone,''),   leads.phone),
+                              email   = COALESCE(NULLIF(EXCLUDED.email,''),   leads.email),
+                              ai_score = GREATEST(EXCLUDED.ai_score, leads.ai_score),
+                              ai_grade = EXCLUDED.ai_grade,
+                              ai_whatsapp_message  = EXCLUDED.ai_whatsapp_message,
+                              ai_email_subject     = EXCLUDED.ai_email_subject,
+                              ai_recommended_service = EXCLUDED.ai_recommended_service,
+                              ai_reason            = EXCLUDED.ai_reason,
+                              next_followup        = EXCLUDED.next_followup
                           `, [
-                            item.id, item.name, item.category, cleanNiche, cityVal, item.website, bestPhone, bestEmail,
+                            stableId, item.name, item.category, cleanNiche, cityVal, item.website || '', bestPhone, bestEmail,
                             score, grade, needsWebsite, needsMarketing,
                             bestContact, whatsappMessage, emailSubject, recommendedService, reason,
                             parseFloat(item.lat), parseFloat(item.lng), nextFollowup, 'New', 'Direct Search'
                           ]);
-                          
+
                           await pool.query(`
                             INSERT INTO lead_vectors (
                               lead_id, business_name, city, niche, phone, website, 
@@ -1244,10 +1316,12 @@ export default defineConfig({
                             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, ARRAY_FILL(0::float, ARRAY[1024])::double precision[], NOW())
                             ON CONFLICT (lead_id) DO UPDATE SET
                               business_name = EXCLUDED.business_name, city = EXCLUDED.city, niche = EXCLUDED.niche,
-                              phone = EXCLUDED.phone, website = EXCLUDED.website, ai_score = EXCLUDED.ai_score,
+                              phone    = COALESCE(NULLIF(EXCLUDED.phone,''),    lead_vectors.phone),
+                              website  = COALESCE(NULLIF(EXCLUDED.website,''),  lead_vectors.website),
+                              ai_score = EXCLUDED.ai_score,
                               ai_grade = EXCLUDED.ai_grade, text_chunk = EXCLUDED.text_chunk
                           `, [
-                            item.id, item.name, cityVal, cleanNiche, bestPhone, item.website,
+                            stableId, item.name, cityVal, cleanNiche, bestPhone, item.website || '',
                             score, grade, needsWebsite, needsMarketing,
                             `Business Name: ${item.name}. Industry: ${cleanNiche}. City: ${cityVal}. Score: ${score}/10. Grade: ${grade}. Contact: ${bestPhone || 'N/A'}. Email: ${bestEmail || 'N/A'}. Website: ${item.website || 'N/A'}. Recommended: ${recommendedService}.`
                           ]);
