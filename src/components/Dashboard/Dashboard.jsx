@@ -19,6 +19,7 @@ import { Doughnut, Line, Bar } from 'react-chartjs-2';
 import './Dashboard.css';
 import ThemeToggle from '../Common/ThemeToggle';
 import * as XLSX from 'xlsx';
+import storage from '../../utils/storage';
 
 // Register Chart.js models
 ChartJS.register(
@@ -141,20 +142,20 @@ const Dashboard = () => {
   const mapRef = useRef(null);
   const markersLayerRef = useRef(null);
 
-  const userStr = localStorage.getItem('user');
+  const userStr = storage.getItem('user');
   const currentUser = userStr ? JSON.parse(userStr) : null;
   const userRole = currentUser?.role || 'user';
 
   // On mount: check token existence and redirect if missing
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = storage.getItem('token');
     if (!token) {
       navigate('/signin');
     }
   }, [navigate]);
 
   const authenticatedFetch = async (url, options = {}) => {
-    const token = localStorage.getItem('token');
+    const token = storage.getItem('token');
     if (!token) {
       navigate('/signin');
       throw new Error('No token found');
@@ -168,8 +169,8 @@ const Dashboard = () => {
     try {
       const response = await fetch(url, { ...options, headers });
       if (response.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        storage.removeItem('token');
+        storage.removeItem('user');
         navigate('/signin');
         throw new Error('Unauthorized');
       }
@@ -218,11 +219,11 @@ const Dashboard = () => {
 
   // Welcome popup on mount
   useEffect(() => {
-    const welcomeFlag = localStorage.getItem('showWelcome');
+    const welcomeFlag = storage.getItem('showWelcome');
     if (welcomeFlag) {
       setWelcomeType(welcomeFlag);
       setWelcomeVisible(true);
-      localStorage.removeItem('showWelcome');
+      storage.removeItem('showWelcome');
       const t = setTimeout(() => setWelcomeVisible(false), 5000);
       return () => clearTimeout(t);
     }
@@ -1849,11 +1850,11 @@ const Dashboard = () => {
             <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)' }}>Theme</span>
             <ThemeToggle />
           </div>
-          <div>Profile: {localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).email : 'satish@admin.io'}</div>
+          <div>Profile: {storage.getItem('user') ? JSON.parse(storage.getItem('user')).email : 'satish@admin.io'}</div>
           <Link className="db-logout" to="/signin" onClick={(e) => {
             e.preventDefault();
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
+            storage.removeItem('token');
+            storage.removeItem('user');
             navigate('/signin');
           }}>Sign Out</Link>
         </div>
@@ -4526,7 +4527,7 @@ const Dashboard = () => {
         )}
 
         {activeTab === 'assigned-tasks' && (() => {
-          const userStr = localStorage.getItem('user');
+          const userStr = storage.getItem('user');
           const user = userStr ? JSON.parse(userStr) : null;
           const myTasks = tasksList.filter(t => t.assignees && t.assignees.some(assignee => assignee.id === user?.id));
           const TASK_COLS = ['Pending', 'In Progress', 'Completed'];
@@ -4671,7 +4672,7 @@ const Dashboard = () => {
         })()}
 
         {activeTab === 'profile' && (() => {
-          const userStr = localStorage.getItem('user');
+          const userStr = storage.getItem('user');
           const user = userStr ? JSON.parse(userStr) : null;
           
           return (
@@ -4733,8 +4734,8 @@ const Dashboard = () => {
               </div>
               <button
                 onClick={() => {
-                  localStorage.removeItem('token');
-                  localStorage.removeItem('user');
+                  storage.removeItem('token');
+                  storage.removeItem('user');
                   navigate('/signin');
                 }}
                 style={{

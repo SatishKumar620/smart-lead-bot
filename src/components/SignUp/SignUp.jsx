@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import './SignUp.css';
+import storage from '../../utils/storage';
 
 const SignUp = () => {
   const containerRef = useRef(null);
@@ -142,14 +143,14 @@ const SignUp = () => {
       }
 
       // Store token and user details in localStorage
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      storage.setItem('token', data.token);
+      storage.setItem('user', JSON.stringify(data.user));
 
       setSubmitStatus('Account created ✓');
       setIsSubmitting(false);
       gsap.to(submitBtnRef.current, { backgroundColor: '#4ade80', duration: 0.4 });
       gsap.to('.panel-right-form', { opacity: 0.96, duration: 0.3 });
-      localStorage.setItem('showWelcome', 'signup');
+      storage.setItem('showWelcome', 'signup');
       
       setTimeout(() => {
         navigate('/dashboard');

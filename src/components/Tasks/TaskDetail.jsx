@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import './TaskDetail.css';
+import storage from '../../utils/storage';
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 const PRIORITY_META = {
@@ -44,22 +45,22 @@ const TaskDetail = () => {
 
   /* ── auth ── */
   useEffect(() => {
-    const token   = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
+    const token   = storage.getItem('token');
+    const userStr = storage.getItem('user');
     if (!token || !userStr) { navigate('/signin'); return; }
     setCurrentUser(JSON.parse(userStr));
   }, [navigate]);
 
   /* ── auth fetch ── */
   const api = async (url, opts = {}) => {
-    const token = localStorage.getItem('token');
+    const token = storage.getItem('token');
     if (!token) { navigate('/signin'); throw new Error('No token'); }
     const resp = await fetch(url, {
       ...opts,
       headers: { 'Authorization': `Bearer ${token}`, ...opts.headers },
     });
     if (resp.status === 401) {
-      localStorage.clear();
+      storage.clear();
       navigate('/signin');
       throw new Error('Unauthorized');
     }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import storage from '../../utils/storage';
 
 const ThemeToggle = () => {
   const [theme, setTheme] = useState(() => {
@@ -13,10 +14,10 @@ const ThemeToggle = () => {
     const root = document.documentElement;
     if (theme === 'light') {
       root.classList.add('light-theme');
-      localStorage.setItem('theme', 'light');
+      storage.setItem('theme', 'light');
     } else {
       root.classList.remove('light-theme');
-      localStorage.setItem('theme', 'dark');
+      storage.setItem('theme', 'dark');
     }
   }, [theme]);
 
