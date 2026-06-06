@@ -149,6 +149,7 @@ const SignUp = () => {
       setIsSubmitting(false);
       gsap.to(submitBtnRef.current, { backgroundColor: '#4ade80', duration: 0.4 });
       gsap.to('.panel-right-form', { opacity: 0.96, duration: 0.3 });
+      localStorage.setItem('showWelcome', 'signup');
       
       setTimeout(() => {
         navigate('/dashboard');

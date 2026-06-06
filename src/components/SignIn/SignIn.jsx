@@ -72,6 +72,7 @@ const SignIn = () => {
       setSubmitStatus('Welcome back ✓');
       setIsSubmitting(false);
       gsap.to(submitBtnRef.current, { backgroundColor: '#4ade80', duration: 0.4 });
+      localStorage.setItem('showWelcome', 'signin');
       
       setTimeout(() => {
         navigate('/dashboard');

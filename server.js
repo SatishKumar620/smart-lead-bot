@@ -158,6 +158,20 @@ pool.query(`
   CREATE INDEX IF NOT EXISTS idx_assignments_task ON task_assignments(task_id);
   CREATE INDEX IF NOT EXISTS idx_milestones_task ON task_milestones(task_id);
   CREATE INDEX IF NOT EXISTS idx_comments_task ON task_comments(task_id);
+
+  CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) REFERENCES users(id) ON DELETE CASCADE,
+    type VARCHAR(100) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    link_tab VARCHAR(100),
+    link_id VARCHAR(255),
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
+  CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC);
 `).then(() => {
   console.log('PostgreSQL: Tables verified.');
 }).catch(err => {
@@ -333,6 +347,57 @@ app.use('/api', (req, res, next) => {
 });
 
 // ═══ CRM ENDPOINTS ═══
+
+// ── Notification helper (called internally by task/comment/lead routes) ──
+const createNotification = async (userId, type, title, message, linkTab, linkId) => {
+  try {
+    await pool.query(
+      'INSERT INTO notifications (user_id, type, title, message, link_tab, link_id) VALUES ($1,$2,$3,$4,$5,$6)',
+      [userId, type, title, message, linkTab || null, String(linkId || '')]
+    );
+  } catch (err) {
+    console.error('Failed to create notification:', err.message);
+  }
+};
+
+// GET /api/notifications — fetch current user's notifications (last 60)
+app.get('/api/notifications', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 60`,
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/notifications/:id/read — mark one notification read
+app.patch('/api/notifications/:id/read', async (req, res) => {
+  try {
+    await pool.query(
+      'UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.user.id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/notifications/read-all — mark all as read
+app.patch('/api/notifications/read-all', async (req, res) => {
+  try {
+    await pool.query(
+      'UPDATE notifications SET is_read = TRUE WHERE user_id = $1',
+      [req.user.id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.get('/api/users', async (req, res) => {
   try {
@@ -565,6 +630,30 @@ app.post('/api/tasks', async (req, res) => {
         await sendResendEmail(userRow.email, subject, bodyText, bodyHtml);
       }
     }
+
+    // ── In-app notifications ──
+    // Each assignee gets a 'task_assigned' notification
+    for (const uid of assignedUserIds) {
+      await createNotification(
+        uid,
+        'task_assigned',
+        `New Task: ${title}`,
+        `You have been assigned "${title}"${teamName ? ` (${teamName})` : ''}. Priority: ${priority}. Due: ${dueDate || 'No deadline'}.`,
+        'assigned-tasks',
+        String(newTask.id)
+      );
+    }
+    // Admin who created the task gets a summary (if they are not also an assignee)
+    if (!assignedUserIds.includes(req.user.id)) {
+      await createNotification(
+        req.user.id,
+        'task_assigned',
+        `Task Delegated: ${title}`,
+        `Task "${title}" was assigned to ${assignedNames.join(', ')}${leadName ? ` for lead "${leadName}"` : ''}.`,
+        'tasks',
+        String(newTask.id)
+      );
+    }
     
     res.json({ message: 'Task delegated successfully', task: newTask, assignees: assigneesQuery.rows, milestones: milestonesList });
   } catch (err) {
@@ -655,6 +744,41 @@ app.put('/api/tasks/:taskId', async (req, res) => {
       [taskId, req.user.id, `Status updated to: ${status}`]
     );
 
+    // ── In-app notifications for status change ──
+    // Get all assignees for this task
+    const assigneeRows = await pool.query(
+      `SELECT ta.user_id, u.role FROM task_assignments ta JOIN users u ON u.id = ta.user_id WHERE ta.task_id = $1`,
+      [taskId]
+    );
+    const isCompleted = status === 'Completed';
+    // Notify all admins about completion
+    if (isCompleted) {
+      const adminRows = await pool.query(`SELECT id FROM users WHERE role = 'admin'`);
+      for (const admin of adminRows.rows) {
+        await createNotification(
+          admin.id,
+          'task_completed',
+          `Task Completed: ${title}`,
+          `Task "${title}" has been marked as Completed by a team member.`,
+          'tasks',
+          taskId
+        );
+      }
+    }
+    // Notify assignees (except who made the change)
+    for (const row of assigneeRows.rows) {
+      if (row.user_id !== req.user.id) {
+        await createNotification(
+          row.user_id,
+          'task_updated',
+          `Task ${isCompleted ? 'Completed' : 'Updated'}: ${title}`,
+          `"${title}" status changed to "${status}".`,
+          'assigned-tasks',
+          taskId
+        );
+      }
+    }
+
     res.json({ message: 'Task updated successfully', status });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -721,6 +845,37 @@ app.post('/api/tasks/:taskId/comments', async (req, res) => {
       last_name: userRes.rows[0]?.last_name || 'User',
       role: userRes.rows[0]?.role || 'user'
     };
+
+    // ── In-app notifications for new comment ──
+    const taskMeta = await pool.query(
+      'SELECT title, assigned_to FROM tasks WHERE id = $1',
+      [taskId]
+    );
+    const taskTitle = taskMeta.rows[0]?.title || 'Task';
+    const commenterName = `${userRes.rows[0]?.first_name || ''} ${userRes.rows[0]?.last_name || ''}`.trim() || 'Someone';
+    // Get all assignees
+    const assigneeCommentRows = await pool.query(
+      'SELECT user_id FROM task_assignments WHERE task_id = $1',
+      [taskId]
+    );
+    const notifyUsers = new Set();
+    // Notify task creator / admin
+    const adminUsersForComment = await pool.query(`SELECT id FROM users WHERE role = 'admin'`);
+    adminUsersForComment.rows.forEach(a => notifyUsers.add(a.id));
+    // Notify all assignees
+    assigneeCommentRows.rows.forEach(r => notifyUsers.add(r.user_id));
+    // Remove the person who wrote the comment
+    notifyUsers.delete(req.user.id);
+    for (const uid of notifyUsers) {
+      await createNotification(
+        uid,
+        'task_comment',
+        `New Comment on "${taskTitle}"`,
+        `${commenterName} commented: "${String(commentRes.rows[0].comment).substring(0, 80)}${commentRes.rows[0].comment.length > 80 ? '...' : ''}"`,
+        req.user.role === 'admin' ? 'tasks' : 'assigned-tasks',
+        taskId
+      );
+    }
     
     res.json(responseComment);
   } catch (err) {

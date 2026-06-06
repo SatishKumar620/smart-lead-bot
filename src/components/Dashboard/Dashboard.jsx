@@ -182,7 +182,95 @@ const Dashboard = () => {
   };
 
   // Active navigation tab
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'map', 'bot', 'nlp-console'
+  const [activeTab, setActiveTab] = useState('overview');
+
+  // ── Welcome popup state ──
+  const [welcomeVisible, setWelcomeVisible] = useState(false);
+  const [welcomeType, setWelcomeType] = useState('signin'); // 'signin' | 'signup'
+
+  // ── Notification state ──
+  const [notifications, setNotifications] = useState([]);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await authenticatedFetch('/api/notifications');
+      if (res.ok) setNotifications(await res.json());
+    } catch (e) { /* silent */ }
+  };
+
+  const markNotifRead = async (id) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    try { await authenticatedFetch(`/api/notifications/${id}/read`, { method: 'PATCH' }); } catch (e) {}
+  };
+
+  const markAllRead = async () => {
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    try { await authenticatedFetch('/api/notifications/read-all', { method: 'PATCH' }); } catch (e) {}
+  };
+
+  const handleNotifClick = (notif) => {
+    markNotifRead(notif.id);
+    setNotifOpen(false);
+    if (notif.link_tab) setActiveTab(notif.link_tab);
+  };
+
+  // Welcome popup on mount
+  useEffect(() => {
+    const welcomeFlag = localStorage.getItem('showWelcome');
+    if (welcomeFlag) {
+      setWelcomeType(welcomeFlag);
+      setWelcomeVisible(true);
+      localStorage.removeItem('showWelcome');
+      const t = setTimeout(() => setWelcomeVisible(false), 5000);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
+  // Poll notifications every 30s
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Close notif dropdown on outside click
+  useEffect(() => {
+    if (!notifOpen) return;
+    const handler = (e) => {
+      if (!e.target.closest('.notif-bell-wrap')) setNotifOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [notifOpen]);
+
+  const relativeTime = (ts) => {
+    const diff = Date.now() - new Date(ts).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  };
+
+  const notifIcon = (type) => {
+    const icons = {
+      task_assigned: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2',
+      task_comment: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
+      task_completed: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+      task_updated: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
+      lead_generated: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6',
+      milestone_done: 'M5 13l4 4L19 7',
+    };
+    return icons[type] || icons.task_assigned;
+  };
+
+  const notifColor = (type) => {
+    const colors = { task_assigned: '#6366f1', task_comment: '#f59e0b', task_completed: '#22c55e', task_updated: '#06b6d4', lead_generated: '#e8962a', milestone_done: '#a855f7' };
+    return colors[type] || '#6366f1';
+  };
 
   // Leads Database State with geographical coordinates (synced with PostgreSQL)
   const [leads, setLeads] = useState([
@@ -1443,6 +1531,41 @@ const Dashboard = () => {
   return (
     <div ref={containerRef} className="db-container">
 
+      {/* ═══ WELCOME POPUP ═══ */}
+      {welcomeVisible && (
+        <div className="welcome-overlay" onClick={() => setWelcomeVisible(false)}>
+          <div className="welcome-popup" onClick={e => e.stopPropagation()}>
+            <button className="welcome-close" onClick={() => setWelcomeVisible(false)} aria-label="Close welcome popup">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+            <div className="welcome-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+              </svg>
+            </div>
+            <div className="welcome-body">
+              <h2 className="welcome-title">
+                {welcomeType === 'signup' ? 'Welcome aboard' : 'Welcome back'},{' '}
+                <span className="welcome-name">{currentUser?.firstName || currentUser?.first_name || currentUser?.email?.split('@')[0] || 'there'}</span>!
+              </h2>
+              <p className="welcome-subtitle">
+                {welcomeType === 'signup'
+                  ? 'Your account is ready. Start discovering high-quality leads with AI-powered prospecting.'
+                  : 'Great to see you again. Your leads and tasks are syncing right now.'}
+              </p>
+              {userRole === 'admin' && (
+                <span className="welcome-role-badge">Admin Access</span>
+              )}
+            </div>
+            <div className="welcome-countdown-bar">
+              <div className="welcome-countdown-fill" />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ═══ LEFT SIDEBAR MENU ═══ */}
       <div className="db-sidebar">
         <div>
@@ -1527,10 +1650,73 @@ const Dashboard = () => {
             <h1>Lead Intelligence Console</h1>
             <p>Real-time telemetry and GPT-4o powered RAG lookup connected to local PostgreSQL database.</p>
           </div>
-          <button className="db-refresh-btn" onClick={fetchLeads}>
-            <NavIcon name="refresh" />
-            Sync Database
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button className="db-refresh-btn" onClick={fetchLeads}>
+              <NavIcon name="refresh" />
+              Sync Database
+            </button>
+
+            {/* ═══ NOTIFICATION BELL ═══ */}
+            <div className="notif-bell-wrap">
+              <button
+                className={`notif-bell-btn${unreadCount > 0 ? ' has-unread' : ''}`}
+                onClick={() => setNotifOpen(o => !o)}
+                aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                {unreadCount > 0 && (
+                  <span className="notif-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+                )}
+              </button>
+
+              {notifOpen && (
+                <div className="notif-dropdown">
+                  <div className="notif-header">
+                    <span className="notif-header-title">Notifications</span>
+                    {unreadCount > 0 && (
+                      <button className="notif-mark-all" onClick={markAllRead}>Mark all read</button>
+                    )}
+                  </div>
+
+                  <div className="notif-list">
+                    {notifications.length === 0 ? (
+                      <div className="notif-empty">
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--fog)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                        </svg>
+                        <p>You&apos;re all caught up!</p>
+                        <span>No notifications yet.</span>
+                      </div>
+                    ) : (
+                      notifications.map(notif => (
+                        <button
+                          key={notif.id}
+                          className={`notif-item${notif.is_read ? '' : ' unread'}`}
+                          onClick={() => handleNotifClick(notif)}
+                        >
+                          <span className="notif-item-icon" style={{ background: notifColor(notif.type) + '22', color: notifColor(notif.type) }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d={notifIcon(notif.type)}/>
+                            </svg>
+                          </span>
+                          <span className="notif-item-body">
+                            <span className="notif-item-title">{notif.title}</span>
+                            <span className="notif-item-msg">{notif.message}</span>
+                            <span className="notif-item-time">{relativeTime(notif.created_at)}</span>
+                          </span>
+                          {!notif.is_read && <span className="notif-unread-dot" />}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* ═══ TAB 1: OVERVIEW ═══ */}

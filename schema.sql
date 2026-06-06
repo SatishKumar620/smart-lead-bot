@@ -144,3 +144,19 @@ CREATE INDEX IF NOT EXISTS idx_activities_lead ON lead_activities(lead_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_task ON task_assignments(task_id);
 CREATE INDEX IF NOT EXISTS idx_milestones_task ON task_milestones(task_id);
 CREATE INDEX IF NOT EXISTS idx_comments_task ON task_comments(task_id);
+
+-- ═══ NOTIFICATIONS TABLE ═══
+CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) REFERENCES users(id) ON DELETE CASCADE,
+    type VARCHAR(100) NOT NULL,
+    -- 'task_assigned' | 'task_comment' | 'task_completed' | 'task_updated' | 'lead_generated' | 'milestone_done'
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    link_tab VARCHAR(100),   -- dashboard tab to open: 'assigned-tasks' | 'tasks' | 'manage' | 'nlp-console'
+    link_id VARCHAR(255),    -- task id or lead_id to highlight
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC);
