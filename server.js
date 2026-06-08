@@ -1155,6 +1155,15 @@ app.post('/api/leads', async (req, res) => {
     const insertedCount = [];
     
     for (const lead of rawLeads) {
+        // Check for duplicate lead based on name, city, niche
+        const duplicateCheck = await pool.query(
+          'SELECT lead_id FROM leads WHERE name = $1 AND city = $2 AND niche = $3',
+          [lead.company || lead.name || 'Unknown', lead.location || lead.city || null, lead.industry || lead.niche || null]
+        );
+        if (duplicateCheck.rowCount > 0) {
+          // Skip duplicate lead
+          continue;
+        }
       const leadId = lead.leadId || lead.lead_id || crypto.randomUUID();
       const name = lead.company || lead.name || 'Unknown';
       const niche = lead.industry || lead.niche || null;
