@@ -1373,7 +1373,49 @@ app.post('/api/find-leads', async (req, res) => {
     let cityVal = 'Bangalore';
     let realCompanies = [];
     
-    // 1. NLP parsing using Groq
+    // Direct local extraction as fallback/primary parsing validation
+    if (rawQuery.trim()) {
+      const q = rawQuery.toLowerCase();
+      const locations = [
+        'west bengal', 'bengal', 'kolkata', 'calcutta', 'pune', 'mumbai', 'bombay', 
+        'delhi', 'new delhi', 'chennai', 'madras', 'hyderabad', 'bangalore', 'bengaluru',
+        'noida', 'gurgaon', 'ahmedabad', 'surat', 'jaipur', 'lucknow', 'kanpur', 'nagpur',
+        'patna', 'indore', 'thane', 'bhopal', 'visakhapatnam', 'vadodara', 'ghaziabad',
+        'ludhiana', 'agra', 'nashik', 'faridabad', 'meerut', 'rajkot', 'varanasi', 'srinagar'
+      ];
+      
+      let foundLocation = null;
+      for (const loc of locations) {
+        if (q.includes(loc)) {
+          foundLocation = loc;
+          break;
+        }
+      }
+      
+      if (foundLocation) {
+        cityVal = foundLocation.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      } else {
+        const locMatch = q.match(/(?:in|near|at|for|around)\s+([a-zA-Z\s]+)/i);
+        if (locMatch && locMatch[1]) {
+          const loc = locMatch[1].trim();
+          cityVal = loc.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        }
+      }
+      
+      let cleanQ = q;
+      if (foundLocation) {
+        cleanQ = cleanQ.replace(new RegExp(`(?:in|near|at|for|around)?\\s*${foundLocation}`, 'gi'), '');
+      }
+      cleanQ = cleanQ.replace(/\b(find|search|get|show\s+me|leads|companies|company|services|service|businesses|business|show\s*rooms|showroom|showrooms)\b/gi, '');
+      cleanQ = cleanQ.replace(/\b(in|near|at|for|around|i|a|an|the)\b/gi, '');
+      cleanQ = cleanQ.replace(/\s+/g, ' ').trim();
+      
+      if (cleanQ) {
+        nicheVal = cleanQ.toLowerCase();
+      }
+    }
+    
+    // 1. NLP parsing using Groq (overrides local fallback if successful)
     if (rawQuery.trim() && groqKey) {
       try {
         const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -1516,6 +1558,8 @@ app.post('/api/find-leads', async (req, res) => {
       lat = 22.5726; lng = 88.3639;
     } else if (cLower.includes("bangalore") || cLower.includes("bengaluru")) {
       lat = 12.9716; lng = 77.5946;
+    } else if (cLower.includes("west bengal") || cLower.includes("bengal")) {
+      lat = 22.9868; lng = 87.8550;
     } else {
       // Nominatim search
       try {
