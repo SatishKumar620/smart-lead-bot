@@ -217,46 +217,7 @@ const Dashboard = () => {
     if (notif.link_tab) setActiveTab(notif.link_tab);
   };
 
-  // Welcome popup on mount
-  useEffect(() => {
-    const welcomeFlag = storage.getItem('showWelcome');
-    if (welcomeFlag) {
-      setWelcomeType(welcomeFlag);
-      setWelcomeVisible(true);
-      storage.removeItem('showWelcome');
-      const t = setTimeout(() => setWelcomeVisible(false), 5000);
-      return () => clearTimeout(t);
-    }
-  }, []);
 
-  // Fetch initial templates and integration config on mount
-  useEffect(() => {
-    fetchIngestTemplates();
-    fetchGoogleStatus();
-    fetchGoogleForms();
-  }, []);
-
-  // Keep googleFormFields in sync with ingestFields
-  useEffect(() => {
-    setGoogleFormFields(ingestFields.map(f => f.key));
-  }, [ingestFields]);
-
-  // Poll notifications every 30s
-  useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Close notif dropdown on outside click
-  useEffect(() => {
-    if (!notifOpen) return;
-    const handler = (e) => {
-      if (!e.target.closest('.notif-bell-wrap')) setNotifOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [notifOpen]);
 
   const relativeTime = (ts) => {
     const diff = Date.now() - new Date(ts).getTime();
@@ -361,6 +322,47 @@ const Dashboard = () => {
   const [googleConfigMessage, setGoogleConfigMessage] = useState('');
   const [googleFormFields, setGoogleFormFields] = useState([]);
   const [formCreateStatus, setFormCreateStatus] = useState('');
+
+  // Welcome popup on mount
+  useEffect(() => {
+    const welcomeFlag = storage.getItem('showWelcome');
+    if (welcomeFlag) {
+      setWelcomeType(welcomeFlag);
+      setWelcomeVisible(true);
+      storage.removeItem('showWelcome');
+      const t = setTimeout(() => setWelcomeVisible(false), 5000);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
+  // Fetch initial templates and integration config on mount
+  useEffect(() => {
+    fetchIngestTemplates();
+    fetchGoogleStatus();
+    fetchGoogleForms();
+  }, []);
+
+  // Keep googleFormFields in sync with ingestFields
+  useEffect(() => {
+    setGoogleFormFields(ingestFields.map(f => f.key));
+  }, [ingestFields]);
+
+  // Poll notifications every 30s
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Close notif dropdown on outside click
+  useEffect(() => {
+    if (!notifOpen) return;
+    const handler = (e) => {
+      if (!e.target.closest('.notif-bell-wrap')) setNotifOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [notifOpen]);
 
   const fetchIngestTemplates = async () => {
     try {
