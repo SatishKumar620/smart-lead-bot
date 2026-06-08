@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import L from 'leaflet';
@@ -141,6 +141,8 @@ const Dashboard = () => {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersLayerRef = useRef(null);
+  const initialFitRef = useRef(false);
+
 
   const userStr = storage.getItem('user');
   const currentUser = userStr ? JSON.parse(userStr) : null;
@@ -726,16 +728,18 @@ const Dashboard = () => {
   const hotLeads = leads.filter(l => l.ai_grade === 'Hot').length;
   const avgScore = totalLeads > 0 ? (leads.reduce((sum, l) => sum + l.ai_score, 0) / totalLeads).toFixed(1) : '0';
 
-  // Filter and search calculations
-  const filteredLeads = leads.filter(lead => {
-    const matchesFilter = filterGrade === 'All' || 
-                          lead.ai_grade === filterGrade || 
-                          lead.status === filterGrade;
-    const matchesSearch = lead.company.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          lead.location.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          lead.industry.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesSearch;
-  });
+  // Filter and search calculations (memoized to keep reference stable)
+  const filteredLeads = useMemo(() => {
+    return leads.filter(lead => {
+      const matchesFilter = filterGrade === 'All' || 
+                            lead.ai_grade === filterGrade || 
+                            lead.status === filterGrade;
+      const matchesSearch = lead.company.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            lead.location.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            lead.industry.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesFilter && matchesSearch;
+    });
+  }, [leads, filterGrade, searchQuery]);
 
   // Center/Pan lead item
   const handleSelectLead = (lead) => {
@@ -770,85 +774,96 @@ const Dashboard = () => {
     });
   };
 
-  // Hook 1: Unified Map Lifecycle, Sizing, and Marker Rendering Hook
+  // Hook 1: Initialize map instance once when activeTab === 'map'
   useEffect(() => {
-    let map = null;
+    if (activeTab !== 'map') return;
 
-    if (activeTab === 'map') {
-      // 1. Initialize map centered on Pune
-      map = L.map('map-viewport', {
-        zoomControl: true,
-        attributionControl: false,
-        scrollWheelZoom: true,
-        dragging: true,
-        doubleClickZoom: true,
-        touchZoom: true
-      }).setView([18.5204, 73.8567], 12);
+    // 1. Initialize map centered on Pune/Default
+    const map = L.map('map-viewport', {
+      zoomControl: true,
+      attributionControl: false,
+      scrollWheelZoom: true,
+      dragging: true,
+      doubleClickZoom: true,
+      touchZoom: true
+    }).setView([18.5204, 73.8567], 12);
 
-      // CartoDB Dark Matter detailed street map (free, no key required)
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 20
-      }).addTo(map);
+    // CartoDB Dark Matter tile layer
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 20
+    }).addTo(map);
 
-      const markersLayer = L.layerGroup().addTo(map);
-      markersLayerRef.current = markersLayer;
-      mapRef.current = map;
+    const markersLayer = L.layerGroup().addTo(map);
+    markersLayerRef.current = markersLayer;
+    mapRef.current = map;
+    initialFitRef.current = false; // Reset bounds autofit on recreate
 
-      // 2. Add markers for each lead
-      const latLngs = [];
-      filteredLeads.forEach((lead) => {
-        if (lead.lat && lead.lng) {
-          const marker = L.marker([lead.lat, lead.lng], {
-            icon: createCustomIcon(lead.ai_grade)
-          });
-
-          const popupContent = `
-            <div class="map-popup-inner" style="min-width: 150px;">
-              <strong style="color: var(--cream); font-size: 13px; font-family: 'Inter', sans-serif; letter-spacing: 0.05em; display: block; margin-bottom: 4px;">${lead.company}</strong>
-              <div style="color: var(--mist); font-size: 10px; margin-bottom: 2px;"><strong>Location:</strong> ${lead.location}</div>
-              <div style="color: var(--mist); font-size: 10px; margin-bottom: 2px;"><strong>Industry:</strong> ${lead.industry}</div>
-              <div style="color: var(--gold); font-size: 10px; margin-bottom: 4px;"><strong>AI Grade:</strong> ${lead.ai_grade} (${lead.ai_score}/10)</div>
-              <div style="border-top: 1px solid var(--line2); padding-top: 4px; margin-top: 4px; color: var(--cream); font-size: 10px;"><strong>Status:</strong> ${lead.status}</div>
-            </div>
-          `;
-
-          marker.bindPopup(popupContent, {
-            closeButton: false,
-            minWidth: 160
-          });
-
-          marker.on('click', () => {
-            map.flyTo([lead.lat, lead.lng], 14, {
-              animate: true,
-              duration: 1.5
-            });
-            setActiveTooltip(lead);
-          });
-
-          markersLayer.addLayer(marker);
-          latLngs.push([lead.lat, lead.lng]);
-        }
-      });
-
-      // 3. Solve Leaflet zero-height initialization bug & scale viewport bounds
-      setTimeout(() => {
-        map.invalidateSize();
-        if (latLngs.length > 0) {
-          map.fitBounds(latLngs, { padding: [50, 50], maxZoom: 13 });
-        }
-      }, 100);
-    }
+    // Handle Leaflet zero-height initialization bug
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 100);
 
     return () => {
-      if (map) {
-        map.remove();
-        mapRef.current = null;
-        markersLayerRef.current = null;
-      }
+      map.remove();
+      mapRef.current = null;
+      markersLayerRef.current = null;
     };
-  }, [activeTab, filteredLeads]);
+  }, [activeTab]);
+
+  // Hook 2: Render and update markers when filteredLeads changes
+  useEffect(() => {
+    const map = mapRef.current;
+    const markersLayer = markersLayerRef.current;
+    if (!map || !markersLayer) return;
+
+    // Clear existing markers
+    markersLayer.clearLayers();
+
+    const latLngs = [];
+    filteredLeads.forEach((lead) => {
+      if (lead.lat && lead.lng) {
+        const marker = L.marker([lead.lat, lead.lng], {
+          icon: createCustomIcon(lead.ai_grade)
+        });
+
+        const popupContent = `
+          <div class="map-popup-inner" style="min-width: 150px;">
+            <strong style="color: var(--cream); font-size: 13px; font-family: 'Inter', sans-serif; letter-spacing: 0.05em; display: block; margin-bottom: 4px;">${lead.company}</strong>
+            <div style="color: var(--mist); font-size: 10px; margin-bottom: 2px;"><strong>Location:</strong> ${lead.location}</div>
+            <div style="color: var(--mist); font-size: 10px; margin-bottom: 2px;"><strong>Industry:</strong> ${lead.industry}</div>
+            <div style="color: var(--gold); font-size: 10px; margin-bottom: 4px;"><strong>AI Grade:</strong> ${lead.ai_grade} (${lead.ai_score}/10)</div>
+            <div style="border-top: 1px solid var(--line2); padding-top: 4px; margin-top: 4px; color: var(--cream); font-size: 10px;"><strong>Status:</strong> ${lead.status}</div>
+          </div>
+        `;
+
+        marker.bindPopup(popupContent, {
+          closeButton: false,
+          minWidth: 160
+        });
+
+        marker.on('click', () => {
+          map.flyTo([lead.lat, lead.lng], 14, {
+            animate: true,
+            duration: 1.5
+          });
+          setActiveTooltip(lead);
+        });
+
+        markersLayer.addLayer(marker);
+        latLngs.push([lead.lat, lead.lng]);
+      }
+    });
+
+    // Only auto-fit bounds on the very first render of the markers,
+    // so subsequent user interactions (clicking a marker, opening tooltips, manual panning)
+    // do not zoom the viewport back out!
+    if (latLngs.length > 0 && !initialFitRef.current) {
+      map.fitBounds(latLngs, { padding: [50, 50], maxZoom: 13 });
+      initialFitRef.current = true;
+    }
+  }, [filteredLeads]);
 
   // Manage lead statuses locally
   const toggleLeadStatus = (leadId) => {
