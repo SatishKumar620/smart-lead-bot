@@ -500,6 +500,8 @@ const Dashboard = () => {
   const [currentCity, setCurrentCity] = useState('');
   const [leadsLimit, setLeadsLimit] = useState(15);
   const [editingLeadId, setEditingLeadId] = useState(null);
+  const [reportRange, setReportRange] = useState('all');
+  const [reportFormat, setReportFormat] = useState('excel');
   const [editForm, setEditForm] = useState({});
   const [uploadMessage, setUploadMessage] = useState(null);
   const [uploadError, setUploadError] = useState(null);
@@ -1223,6 +1225,34 @@ const Dashboard = () => {
     alert(`DISPATCHED: Telegram alert sent successfully to AE for ${lead.company} (Score: ${lead.ai_score}/10)`);
   };
 
+  // Fetch from the backend report export endpoint and trigger a browser download
+  const handleDownloadReport = async () => {
+    try {
+      const response = await authenticatedFetch(`/api/leads/export?range=${reportRange}&format=${reportFormat}`);
+      if (!response.ok) {
+        throw new Error(`Failed to generate report. Server returned status ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      let extension = 'xlsx';
+      if (reportFormat === 'csv') extension = 'csv';
+      else if (reportFormat === 'json') extension = 'json';
+      
+      a.download = `leads_report_${reportRange}_${new Date().toISOString().split('T')[0]}.${extension}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+    } catch (err) {
+      console.error("Report export failed:", err);
+      alert(`Export failed: ${err.message}`);
+    }
+  };
+
   // Run actual n8n search pipeline with webhook connection & high-fidelity local fallback resilience
   const handleN8nSearch = async (e) => {
     e.preventDefault();
@@ -1780,7 +1810,7 @@ const Dashboard = () => {
 
       {/* ═══ LEFT SIDEBAR MENU ═══ */}
       <div className="db-sidebar">
-        <div>
+        <div className="db-nav">
           <div className="db-logo-wrap">
             <Link className="db-logo" to="/">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', display: 'inline-block', verticalAlign: 'middle' }}>
@@ -1964,6 +1994,90 @@ const Dashboard = () => {
                 <span className="db-stat-val">Realtime</span>
                 <span className="db-stat-lbl">Sync Interval</span>
                 <span className="db-stat-badge">10s Polling</span>
+              </div>
+            </div>
+
+            {/* EXPORT REPORT CARD */}
+            <div className="nlp-console-card" style={{ marginBottom: '24px' }}>
+              <div className="db-card-title-wrap" style={{ marginBottom: '16px' }}>
+                <span className="db-card-title">Export & Download Intelligence Reports</span>
+                <span style={{ fontSize: '10px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Generate and download lead directories in multiple formats</span>
+              </div>
+              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '11px', color: 'var(--fog)', textTransform: 'uppercase' }}>Time Range</label>
+                  <select
+                    value={reportRange}
+                    onChange={(e) => setReportRange(e.target.value)}
+                    style={{
+                      background: 'var(--ink3)',
+                      border: '1px solid var(--line)',
+                      color: 'var(--cream)',
+                      padding: '10px 16px',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      outline: 'none',
+                      width: '180px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="all">All Time</option>
+                    <option value="daily">Daily (Last 24h)</option>
+                    <option value="weekly">Weekly (Last 7d)</option>
+                    <option value="monthly">Monthly (Last 30d)</option>
+                    <option value="yearly">Yearly (Last 365d)</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '11px', color: 'var(--fog)', textTransform: 'uppercase' }}>Format</label>
+                  <select
+                    value={reportFormat}
+                    onChange={(e) => setReportFormat(e.target.value)}
+                    style={{
+                      background: 'var(--ink3)',
+                      border: '1px solid var(--line)',
+                      color: 'var(--cream)',
+                      padding: '10px 16px',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      outline: 'none',
+                      width: '180px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="excel">Excel (.xlsx)</option>
+                    <option value="csv">CSV (.csv)</option>
+                    <option value="json">JSON (.json)</option>
+                  </select>
+                </div>
+                <button
+                  onClick={handleDownloadReport}
+                  style={{
+                    background: 'var(--gold)',
+                    border: 'none',
+                    color: 'var(--ink)',
+                    padding: '12px 24px',
+                    borderRadius: '8px',
+                    fontFamily: 'Manrope, sans-serif',
+                    fontWeight: '800',
+                    fontSize: '13px',
+                    letterSpacing: '.06em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    marginTop: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.2)'
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  Download Report
+                </button>
               </div>
             </div>
 
