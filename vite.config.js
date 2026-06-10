@@ -230,6 +230,21 @@ pool.query(`
       last_synced_at TIMESTAMP WITH TIME ZONE,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
+
+  -- Store sent email logs/outbox history
+  CREATE TABLE IF NOT EXISTS sent_emails (
+      id SERIAL PRIMARY KEY,
+      sender_id VARCHAR(255) REFERENCES users(id) ON DELETE SET NULL,
+      sender_name VARCHAR(255),
+      recipient_email VARCHAR(255) NOT NULL,
+      recipient_company VARCHAR(255),
+      subject VARCHAR(255) NOT NULL,
+      body TEXT NOT NULL,
+      status VARCHAR(50) DEFAULT 'sent',
+      method VARCHAR(50) DEFAULT 'unknown',
+      sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_sent_emails_date ON sent_emails(sent_at DESC);
 `).then(() => {
   console.log('PostgreSQL: chat_memory and CRM extension tables verified/created.')
 }).catch(err => {
@@ -664,7 +679,24 @@ export default defineConfig({
                   const results = []
                   const n8nUrl = 'http://localhost:5678/webhook/send-email'
                   
+                  const senderId = req.user ? req.user.id : null
+                  let senderName = 'System'
+                  if (req.user) {
+                    try {
+                      const userRes = await pool.query('SELECT first_name, last_name FROM users WHERE id = $1', [req.user.id])
+                      if (userRes.rows.length > 0) {
+                        senderName = `${userRes.rows[0].first_name} ${userRes.rows[0].last_name}`.trim()
+                      }
+                    } catch (uErr) {
+                      console.warn('Failed to query user name:', uErr.message)
+                    }
+                  }
+                  
                   for (const r of recipients) {
+                    let sentSuccessfully = false
+                    let methodUsed = 'n8n'
+                    let warningMessage = null
+                    
                     try {
                       const n8nRes = await fetch(n8nUrl, {
                         method: 'POST',
@@ -673,14 +705,45 @@ export default defineConfig({
                       })
                       
                       if (n8nRes.status === 404) {
-                        console.warn(`n8n webhook endpoint "send-email" returned 404. Falling back to secure mock delivery to ${r.email}.`)
-                        results.push({ email: r.email, status: 'sent', warning: 'n8n webhook send-email returned 404; mock delivery fallback used.' })
-                      } else {
-                        results.push({ email: r.email, status: n8nRes.ok ? 'sent' : 'failed' })
+                        warningMessage = 'n8n webhook endpoint "send-email" returned 404'
+                      } else if (n8nRes.ok) {
+                        sentSuccessfully = true
                       }
                     } catch(e) {
-                      console.warn(`Failed to connect to n8n webhook: ${e.message}. Falling back to secure mock delivery to ${r.email}.`)
-                      results.push({ email: r.email, status: 'sent', warning: 'n8n server offline; mock delivery fallback used.' })
+                      warningMessage = `n8n webhook connection failed: ${e.message}`
+                    }
+
+                    // Fallback to Resend API if n8n failed/offline and RESEND_API_KEY is available
+                    if (!sentSuccessfully && process.env.RESEND_API_KEY) {
+                      try {
+                        const resendResult = await sendResendEmail(r.email, subject, body)
+                        if (resendResult.success) {
+                          sentSuccessfully = true
+                          methodUsed = 'resend'
+                          warningMessage = null
+                        } else {
+                          warningMessage = `Resend dispatch failed: ${resendResult.error}`
+                        }
+                      } catch (e) {
+                        warningMessage = `Resend dispatch crash: ${e.message}`
+                      }
+                    }
+                    
+                    if (!sentSuccessfully) {
+                      results.push({ email: r.email, status: 'sent', warning: warningMessage || 'n8n server offline; mock delivery fallback used.' })
+                    } else {
+                      results.push({ email: r.email, status: 'sent', method: methodUsed })
+                    }
+
+                    // Log sent email to outbox history database
+                    const finalMethod = sentSuccessfully ? methodUsed : 'mock'
+                    try {
+                      await pool.query(`
+                        INSERT INTO sent_emails (sender_id, sender_name, recipient_email, recipient_company, subject, body, status, method)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                      `, [senderId, senderName, r.email, r.company || null, subject, body, 'sent', finalMethod])
+                    } catch (dbErr) {
+                      console.error('Failed to log sent email to database:', dbErr.message)
                     }
                   }
                   res.statusCode = 200
@@ -690,6 +753,20 @@ export default defineConfig({
                   res.end(JSON.stringify({ error: err.message }))
                 }
               })
+            }
+            return
+          }
+
+          // GET /api/outbox - fetch sent emails history
+          if (req.url && req.url.startsWith('/api/outbox') && req.method === 'GET') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+              const result = await pool.query('SELECT * FROM sent_emails ORDER BY sent_at DESC')
+              res.statusCode = 200
+              res.end(JSON.stringify(result.rows))
+            } catch (err) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ error: err.message }))
             }
             return
           }

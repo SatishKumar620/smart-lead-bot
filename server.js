@@ -208,6 +208,21 @@ pool.query(`
       last_synced_at TIMESTAMP WITH TIME ZONE,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
+
+  -- Store sent email logs/outbox history
+  CREATE TABLE IF NOT EXISTS sent_emails (
+      id SERIAL PRIMARY KEY,
+      sender_id VARCHAR(255) REFERENCES users(id) ON DELETE SET NULL,
+      sender_name VARCHAR(255),
+      recipient_email VARCHAR(255) NOT NULL,
+      recipient_company VARCHAR(255),
+      subject VARCHAR(255) NOT NULL,
+      body TEXT NOT NULL,
+      status VARCHAR(50) DEFAULT 'sent',
+      method VARCHAR(50) DEFAULT 'unknown',
+      sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_sent_emails_date ON sent_emails(sent_at DESC);
 `).then(() => {
   console.log('PostgreSQL: Tables verified.');
 }).catch(err => {
@@ -939,6 +954,19 @@ app.post('/api/send-emails', async (req, res) => {
     const results = [];
     const n8nUrl = 'http://localhost:5678/webhook/send-email';
     
+    const senderId = req.user ? req.user.id : null;
+    let senderName = 'System';
+    if (req.user) {
+      try {
+        const userRes = await pool.query('SELECT first_name, last_name FROM users WHERE id = $1', [req.user.id]);
+        if (userRes.rows.length > 0) {
+          senderName = `${userRes.rows[0].first_name} ${userRes.rows[0].last_name}`.trim();
+        }
+      } catch (uErr) {
+        console.warn('Failed to query user name:', uErr.message);
+      }
+    }
+    
     for (const r of recipients) {
       let sentSuccessfully = false;
       let methodUsed = 'n8n';
@@ -992,8 +1020,29 @@ app.post('/api/send-emails', async (req, res) => {
           method: methodUsed
         });
       }
+
+      // Log sent email to outbox history database
+      const finalMethod = sentSuccessfully ? methodUsed : 'mock';
+      try {
+        await pool.query(`
+          INSERT INTO sent_emails (sender_id, sender_name, recipient_email, recipient_company, subject, body, status, method)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [senderId, senderName, r.email, r.company || null, subject, body, 'sent', finalMethod]);
+      } catch (dbErr) {
+        console.error('Failed to log sent email to database:', dbErr.message);
+      }
     }
     res.json({ message: 'Done', results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/outbox - fetch sent emails history
+app.get('/api/outbox', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM sent_emails ORDER BY sent_at DESC');
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

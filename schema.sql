@@ -194,3 +194,19 @@ CREATE TABLE IF NOT EXISTS google_forms (
     last_synced_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Store sent email logs/outbox history
+CREATE TABLE IF NOT EXISTS sent_emails (
+    id SERIAL PRIMARY KEY,
+    sender_id VARCHAR(255) REFERENCES users(id) ON DELETE SET NULL,
+    sender_name VARCHAR(255),
+    recipient_email VARCHAR(255) NOT NULL,
+    recipient_company VARCHAR(255),
+    subject VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    status VARCHAR(50) DEFAULT 'sent',
+    method VARCHAR(50) DEFAULT 'unknown',
+    sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_sent_emails_date ON sent_emails(sent_at DESC);
+

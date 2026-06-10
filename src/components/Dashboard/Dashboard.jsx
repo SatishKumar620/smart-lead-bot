@@ -326,6 +326,13 @@ const Dashboard = () => {
   const [formCreateStatus, setFormCreateStatus] = useState('');
   const [showCredentialsForm, setShowCredentialsForm] = useState(false);
 
+  // --- Outbox History Drawer States ---
+  const [outboxOpen, setOutboxOpen] = useState(false);
+  const [outboxEmails, setOutboxEmails] = useState([]);
+  const [outboxSearch, setOutboxSearch] = useState('');
+  const [selectedOutboxEmail, setSelectedOutboxEmail] = useState(null);
+  const [outboxLoading, setOutboxLoading] = useState(false);
+
   // Welcome popup on mount
   useEffect(() => {
     const welcomeFlag = storage.getItem('showWelcome');
@@ -343,6 +350,7 @@ const Dashboard = () => {
     fetchIngestTemplates();
     fetchGoogleStatus();
     fetchGoogleForms();
+    fetchOutboxHistory();
   }, []);
 
   // Keep googleFormFields in sync with ingestFields
@@ -389,6 +397,20 @@ const Dashboard = () => {
       const res = await authenticatedFetch('/api/google-forms/list');
       if (res.ok) setGoogleForms(await res.json());
     } catch (e) { console.error(e); }
+  };
+
+  const fetchOutboxHistory = async () => {
+    setOutboxLoading(true);
+    try {
+      const res = await authenticatedFetch('/api/outbox');
+      if (res.ok) {
+        setOutboxEmails(await res.json());
+      }
+    } catch (e) {
+      console.error('Failed to fetch outbox history:', e);
+    } finally {
+      setOutboxLoading(false);
+    }
   };
 
   const saveGoogleCredentials = async (e) => {
@@ -661,6 +683,9 @@ const Dashboard = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: success ? 'sent' : 'failed' })
       });
+
+      // Refresh outbox history in the frontend state
+      fetchOutboxHistory();
 
     } catch (err) {
       console.error('Failed to send outreach:', err);
@@ -1883,6 +1908,13 @@ const Dashboard = () => {
                 My Tasks
               </button>
             )}
+            <button className={`db-nav-item ${outboxOpen ? 'active' : ''}`} onClick={() => { setOutboxOpen(true); fetchOutboxHistory(); }}>
+              <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+                <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+              </svg>
+              <span>Outbox History</span>
+            </button>
             <button className={`db-nav-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
               <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -3711,6 +3743,18 @@ const Dashboard = () => {
                     <span style={{ fontSize: '10px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Google OAuth 2.0 Credentials API</span>
                   </div>
 
+                  {!googleStatus.envConfigured && (
+                    <div style={{ background: 'rgba(232,150,42,0.08)', border: '1px solid rgba(232,150,42,0.3)', padding: '16px', borderRadius: '8px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <span style={{ fontSize: '12px', color: 'var(--cream)', fontWeight: 600 }}>One-Click Connect Pending</span>
+                      </div>
+                      <p style={{ fontSize: '11px', color: 'var(--fog)', margin: 0, lineHeight: '1.4' }}>
+                        To enable one-click connection without entering credentials, add <strong style={{ color: 'var(--gold)' }}>GOOGLE_CLIENT_ID</strong> and <strong style={{ color: 'var(--gold)' }}>GOOGLE_CLIENT_SECRET</strong> as Secrets in your Hugging Face Space settings.
+                      </p>
+                    </div>
+                  )}
+
                   {googleStatus.envConfigured && (
                     <div style={{ background: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.2)', padding: '16px', borderRadius: '8px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -4931,6 +4975,178 @@ const Dashboard = () => {
         })()}
 
       </div>
+
+      {/* ═══ OUTBOX HISTORY DRAWER (SLIDING FROM RIGHT) ═══ */}
+      {outboxOpen && (
+        <div className="outbox-drawer-overlay" onClick={() => { setOutboxOpen(false); setSelectedOutboxEmail(null); }}>
+          <div className="outbox-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="outbox-drawer-header">
+              <div className="outbox-header-title-wrap">
+                <svg className="outbox-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+                  <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+                </svg>
+                <h2>Outbox History</h2>
+              </div>
+              <button className="outbox-close-btn" onClick={() => { setOutboxOpen(false); setSelectedOutboxEmail(null); }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="outbox-drawer-body-wrap">
+              {/* Left Column: Email List & Search */}
+              <div className="outbox-list-pane">
+                <div className="outbox-search-wrap">
+                  <svg className="outbox-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Search recipient, subject, company..."
+                    value={outboxSearch}
+                    onChange={(e) => setOutboxSearch(e.target.value)}
+                    className="outbox-search-input"
+                  />
+                  {outboxSearch && (
+                    <button className="outbox-search-clear" onClick={() => setOutboxSearch('')}>×</button>
+                  )}
+                </div>
+
+                {outboxLoading ? (
+                  <div className="outbox-loading-state">
+                    <div className="outbox-spinner"></div>
+                    <p>Loading outbox history...</p>
+                  </div>
+                ) : (
+                  <div className="outbox-list">
+                    {(() => {
+                      const filtered = outboxEmails.filter(email => {
+                        const q = outboxSearch.toLowerCase();
+                        return (
+                          email.recipient_email?.toLowerCase().includes(q) ||
+                          email.recipient_company?.toLowerCase().includes(q) ||
+                          email.subject?.toLowerCase().includes(q) ||
+                          email.body?.toLowerCase().includes(q)
+                        );
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="outbox-empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="8" y1="12" x2="16" y2="12" />
+                            </svg>
+                            <p>No outbox logs found</p>
+                          </div>
+                        );
+                      }
+
+                      return filtered.map((email) => {
+                        const isSelected = selectedOutboxEmail?.id === email.id;
+                        const dateStr = email.sent_at 
+                          ? new Date(email.sent_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                          : 'Unknown';
+
+                        return (
+                          <div
+                            key={email.id}
+                            className={`outbox-item ${isSelected ? 'selected' : ''}`}
+                            onClick={() => setSelectedOutboxEmail(email)}
+                          >
+                            <div className="outbox-item-header">
+                              <span className="outbox-item-recipient" title={email.recipient_email}>
+                                {email.recipient_email}
+                              </span>
+                              <span className="outbox-item-time">{dateStr}</span>
+                            </div>
+                            {email.recipient_company && (
+                              <div className="outbox-item-company">@{email.recipient_company}</div>
+                            )}
+                            <div className="outbox-item-subject">{email.subject}</div>
+                            <div className="outbox-item-meta">
+                              <span className={`outbox-badge method-${email.method || 'mock'}`}>
+                                {email.method || 'mock'}
+                              </span>
+                              <span className={`outbox-badge status-${email.status || 'sent'}`}>
+                                {email.status || 'sent'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column: Email Detail Preview */}
+              <div className="outbox-detail-pane">
+                {selectedOutboxEmail ? (
+                  <div className="outbox-email-detail">
+                    <div className="outbox-detail-header">
+                      <div className="outbox-detail-row">
+                        <span className="detail-label">To:</span>
+                        <span className="detail-value text-highlight">
+                          {selectedOutboxEmail.recipient_email}
+                          {selectedOutboxEmail.recipient_company && ` (${selectedOutboxEmail.recipient_company})`}
+                        </span>
+                      </div>
+                      <div className="outbox-detail-row">
+                        <span className="detail-label">From:</span>
+                        <span className="detail-value">
+                          {selectedOutboxEmail.sender_name || 'AI Sales Copilot'}
+                        </span>
+                      </div>
+                      <div className="outbox-detail-row">
+                        <span className="detail-label">Sent:</span>
+                        <span className="detail-value">
+                          {selectedOutboxEmail.sent_at 
+                            ? new Date(selectedOutboxEmail.sent_at).toLocaleString()
+                            : 'Unknown'}
+                        </span>
+                      </div>
+                      <div className="outbox-detail-row">
+                        <span className="detail-label">Method:</span>
+                        <span className="detail-value">
+                          <span className={`outbox-badge method-${selectedOutboxEmail.method || 'mock'}`}>
+                            {selectedOutboxEmail.method || 'mock'}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="outbox-detail-row">
+                        <span className="detail-label">Status:</span>
+                        <span className="detail-value">
+                          <span className={`outbox-badge status-${selectedOutboxEmail.status || 'sent'}`}>
+                            {selectedOutboxEmail.status || 'sent'}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="outbox-detail-subject">
+                        {selectedOutboxEmail.subject}
+                      </div>
+                    </div>
+                    <div className="outbox-detail-body">
+                      {selectedOutboxEmail.body}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="outbox-detail-placeholder">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                      <rect x="2" y="4" width="20" height="16" rx="2" />
+                      <path d="M22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                    </svg>
+                    <p>Select an email from the list to preview the headers and body content.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
