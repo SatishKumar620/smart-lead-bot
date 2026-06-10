@@ -103,6 +103,121 @@ async function getGoogleCredentials(req) {
   return { client_id, client_secret, redirect_uri };
 }
 
+// Helper: Send alert to linked Telegram user bot
+async function sendTelegramAlert(userId, text) {
+  try {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    if (!token) return;
+    
+    const userRes = await pool.query('SELECT telegram_chat_id, telegram_linked FROM users WHERE id = $1', [userId]);
+    const user = userRes.rows[0];
+    if (!user || !user.telegram_linked || !user.telegram_chat_id) {
+      return;
+    }
+    
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: user.telegram_chat_id,
+        text: text,
+        parse_mode: 'Markdown'
+      })
+    });
+    if (!res.ok) {
+      console.error('Failed to send Telegram message:', await res.text());
+    }
+  } catch (err) {
+    console.error('Failed to send Telegram alert:', err.message);
+  }
+}
+
+// Helper: Fetch real email messages from Gmail API
+async function fetchGmailMessages(accessToken, folderName) {
+  let labelId = 'INBOX';
+  if (folderName === 'draft') labelId = 'DRAFT';
+  else if (folderName === 'outbox') labelId = 'SENT';
+  else if (folderName === 'spam') labelId = 'SPAM';
+  
+  try {
+    const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds=${labelId}&maxResults=8`;
+    const listRes = await fetch(listUrl, {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+    
+    if (!listRes.ok) {
+      console.error(`Gmail list failed for label ${labelId}:`, await listRes.text());
+      return [];
+    }
+    
+    const listData = await listRes.json();
+    if (!listData.messages || listData.messages.length === 0) {
+      return [];
+    }
+    
+    const detailsPromises = listData.messages.map(async (msg) => {
+      try {
+        const detailRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        if (!detailRes.ok) return null;
+        return await detailRes.json();
+      } catch (e) {
+        return null;
+      }
+    });
+    
+    const details = await Promise.all(detailsPromises);
+    const validDetails = details.filter(Boolean);
+    
+    return validDetails.map(msg => {
+      const headers = msg.payload?.headers || [];
+      const getHeader = (name) => {
+        const h = headers.find(item => item.name.toLowerCase() === name.toLowerCase());
+        return h ? h.value : '';
+      };
+      
+      const fromVal = getHeader('from');
+      const toVal = getHeader('to');
+      const subjectVal = getHeader('subject') || '(No Subject)';
+      const dateVal = getHeader('date');
+      
+      let bodyText = '';
+      const parts = msg.payload?.parts;
+      if (msg.payload?.body?.data) {
+        bodyText = Buffer.from(msg.payload.body.data, 'base64').toString('utf-8');
+      } else if (parts && parts.length > 0) {
+        const plainPart = parts.find(p => p.mimeType === 'text/plain');
+        if (plainPart && plainPart.body?.data) {
+          bodyText = Buffer.from(plainPart.body.data, 'base64').toString('utf-8');
+        } else if (parts[0]?.body?.data) {
+          bodyText = Buffer.from(parts[0].body.data, 'base64').toString('utf-8');
+        }
+      }
+      
+      if (!bodyText.trim()) {
+        bodyText = msg.snippet || '';
+      }
+      
+      return {
+        id: `gmail_${msg.id}`,
+        folder: folderName,
+        sender: fromVal,
+        recipient: toVal,
+        subject: subjectVal,
+        body: bodyText,
+        snippet: msg.snippet || bodyText.substring(0, 70),
+        is_read: !msg.labelIds?.includes('UNREAD'),
+        sent_at: dateVal ? new Date(dateVal) : new Date(parseInt(msg.internalDate))
+      };
+    });
+  } catch (err) {
+    console.error(`Error fetching Gmail messages for ${folderName}:`, err.message);
+    return [];
+  }
+}
+
 // Helper: Get fresh access token using refresh token if expired
 async function getFreshGoogleToken() {
   const result = await pool.query("SELECT access_token, refresh_token, token_expiry FROM google_settings WHERE id = 'global'");
@@ -1099,6 +1214,11 @@ export default defineConfig({
                     
                     insertedCount.push(leadId)
                     
+                    if (grade === 'Hot' || grade === 'Warm') {
+                      const alertText = `🔥 *${grade.toUpperCase()} LEAD INGESTED*\n\n🏢 *${name}*\n📍 City: ${city || 'N/A'}\n💼 Niche: ${niche || 'N/A'}\n📞 Phone: ${phone || 'N/A'}\n📧 Email: ${email || 'N/A'}\n🌐 Website: ${website || 'N/A'}\n⭐ Score: ${score || 'N/A'}/10\n📢 Source: ${source}`;
+                      await sendTelegramAlert(req.user.id, alertText);
+                    }
+                    
                     // Trigger Telegram alert webhook in n8n in parallel if single manual ingest lead
                     if (rawLeads.length === 1) {
                       try {
@@ -1550,6 +1670,11 @@ export default defineConfig({
                             score, grade, needsWebsite, needsMarketing,
                             `Business Name: ${item.name}. Industry: ${cleanNiche}. City: ${cityVal}. Score: ${score}/10. Grade: ${grade}. Contact: ${bestPhone || 'N/A'}. Email: ${bestEmail || 'N/A'}. Website: ${item.website || 'N/A'}. Recommended: ${recommendedService}.`
                           ]);
+                          
+                          if (grade === 'Hot' || grade === 'Warm') {
+                            const alertText = `🔥 *${grade.toUpperCase()} LEAD DISCOVERED*\n\n🏢 *${item.name}*\n📍 City: ${cityVal}\n💼 Niche: ${cleanNiche}\n📞 Phone: ${bestPhone || 'N/A'}\n📧 Email: ${bestEmail || 'N/A'}\n🌐 Website: ${item.website || 'N/A'}\n⭐ Score: ${score}/10\n📢 Source: Direct Search`;
+                            await sendTelegramAlert(req.user.id, alertText);
+                          }
                         } catch (dbErr) {
                           console.error('[Vite Dev] Direct save error:', dbErr.message);
                         }
@@ -1931,6 +2056,7 @@ ${JSON.stringify(leadsData)}`
               const scopes = [
                 'https://www.googleapis.com/auth/forms.body',
                 'https://www.googleapis.com/auth/forms.responses.readonly',
+                'https://www.googleapis.com/auth/gmail.readonly',
                 'https://www.googleapis.com/auth/userinfo.profile',
                 'https://www.googleapis.com/auth/userinfo.email'
               ].join(' ')
@@ -2557,6 +2683,21 @@ ${JSON.stringify(leadsData)}`
                 res.statusCode = 200
                 res.end(JSON.stringify(mapped))
               } else {
+                let gmailMessages = []
+                try {
+                  const accessToken = await getFreshGoogleToken()
+                  if (accessToken) {
+                    gmailMessages = await fetchGmailMessages(accessToken, folder)
+                    if (gmailMessages && gmailMessages.length > 0) {
+                      res.statusCode = 200
+                      res.end(JSON.stringify(gmailMessages))
+                      return
+                    }
+                  }
+                } catch (e) {
+                  // Ignore and fallback
+                }
+
                 const result = await pool.query(
                   `SELECT id, folder, sender, recipient, subject, body, snippet, is_read, sent_at 
                    FROM user_emails 
