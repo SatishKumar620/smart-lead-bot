@@ -468,6 +468,14 @@ const Dashboard = () => {
 
   const handleConnectEmail = async () => {
     try {
+      if (!googleStatus.connected) {
+        const res = await authenticatedFetch('/api/google/auth-url');
+        if (res.ok) {
+          const data = await res.json();
+          window.location.href = data.url;
+          return;
+        }
+      }
       const res = await authenticatedFetch('/api/email/connect', { method: 'POST' });
       if (res.ok) {
         fetchEmailStatus();

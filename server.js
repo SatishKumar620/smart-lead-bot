@@ -2480,6 +2480,7 @@ app.get('/api/google/auth-url', async (req, res) => {
       `response_type=code&` +
       `scope=${encodeURIComponent(scopes)}&` +
       `access_type=offline&` +
+      `state=${encodeURIComponent(req.user.id)}&` +
       `prompt=consent`;
       
     res.json({ url: authUrl });
@@ -2490,7 +2491,7 @@ app.get('/api/google/auth-url', async (req, res) => {
 
 // OAuth Callback Route
 app.get('/api/auth/google/callback', async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
   if (!code) {
     return res.status(400).send('OAuth Error: Missing code query parameter');
   }
@@ -2544,6 +2545,11 @@ app.get('/api/auth/google/callback', async (req, res) => {
         token_expiry = EXCLUDED.token_expiry,
         email = COALESCE(EXCLUDED.email, google_settings.email)
     `, [client_id, client_secret, redirect_uri, access_token, refresh_token || null, tokenExpiry, email]);
+
+    // If state contains a userId, automatically toggle their email_linked status
+    if (state) {
+      await pool.query('UPDATE users SET email_linked = TRUE WHERE id = $1', [state]);
+    }
     
     // Redirect to dashboard page
     res.send(`
@@ -2957,9 +2963,32 @@ app.get('/api/telegram/status', async (req, res) => {
   try {
     const userRes = await pool.query('SELECT telegram_linked, telegram_chat_id FROM users WHERE id = $1', [req.user.id]);
     const user = userRes.rows[0];
-    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'smart_lead_prospector_bot';
+    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'Smart_leadintel_bot';
     const startParam = Buffer.from(req.user.id).toString('base64').replace(/=/g, '');
     const linkUrl = `https://t.me/${botUsername}?start=${startParam}`;
+
+    // Register Telegram webhook dynamically using host header
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    if (token) {
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      if (protocol === 'https' || (host && !host.includes('localhost') && !host.includes('127.0.0.1'))) {
+        const secureProtocol = (host && !host.includes('localhost') && !host.includes('127.0.0.1')) ? 'https' : protocol;
+        const webhookUrl = `${secureProtocol}://${host}/api/telegram/webhook`;
+        fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`)
+          .then(async (r) => {
+            if (!r.ok) {
+              console.error('[TELEGRAM WEBHOOK] setWebhook failed:', await r.text());
+            } else {
+              console.log('[TELEGRAM WEBHOOK] Successfully registered:', webhookUrl);
+            }
+          })
+          .catch((err) => {
+            console.error('[TELEGRAM WEBHOOK] Error setting webhook:', err.message);
+          });
+      }
+    }
+
     res.json({
       linked: !!(user && user.telegram_linked),
       chatId: user ? user.telegram_chat_id : null,
