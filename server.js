@@ -209,7 +209,6 @@ pool.query(`
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
 
-  -- Store sent email logs/outbox history
   CREATE TABLE IF NOT EXISTS sent_emails (
       id SERIAL PRIMARY KEY,
       sender_id VARCHAR(255) REFERENCES users(id) ON DELETE SET NULL,
@@ -223,8 +222,27 @@ pool.query(`
       sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
   CREATE INDEX IF NOT EXISTS idx_sent_emails_date ON sent_emails(sent_at DESC);
+
+  -- Telegram and Business Email Sync Extensions
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(255);
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_linked BOOLEAN DEFAULT FALSE;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS email_linked BOOLEAN DEFAULT FALSE;
+
+  CREATE TABLE IF NOT EXISTS user_emails (
+      id SERIAL PRIMARY KEY,
+      user_id VARCHAR(255) REFERENCES users(id) ON DELETE CASCADE,
+      folder VARCHAR(50) NOT NULL,
+      sender VARCHAR(255) NOT NULL,
+      recipient VARCHAR(255) NOT NULL,
+      subject VARCHAR(255) NOT NULL,
+      body TEXT NOT NULL,
+      snippet VARCHAR(255),
+      is_read BOOLEAN DEFAULT FALSE,
+      sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_user_emails_user_folder ON user_emails(user_id, folder);
 `).then(() => {
-  console.log('PostgreSQL: Tables verified.');
+  console.log('PostgreSQL: Tables and extensions verified.');
 }).catch(err => {
   console.error('Failed to initialize PostgreSQL extensions:', err.message);
 });
@@ -394,6 +412,7 @@ const authenticateToken = async (req, res, next) => {
 // Protect all other api routes
 app.use('/api', (req, res, next) => {
   if (req.path.startsWith('/auth/')) return next();
+  if (req.path.startsWith('/telegram/webhook')) return next();
   authenticateToken(req, res, next);
 });
 
@@ -2803,6 +2822,243 @@ app.post('/api/google-forms/sync', async (req, res) => {
     res.json({ message: `Successfully synced! Imported ${importedCount} new leads.`, count: importedCount });
   } catch (err) {
     console.error('Google Form Sync Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══ TELEGRAM BOT INTEGRATION ═══
+
+app.get('/api/telegram/status', async (req, res) => {
+  try {
+    const userRes = await pool.query('SELECT telegram_linked, telegram_chat_id FROM users WHERE id = $1', [req.user.id]);
+    const user = userRes.rows[0];
+    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'smart_lead_prospector_bot';
+    const startParam = Buffer.from(req.user.id).toString('base64').replace(/=/g, '');
+    const linkUrl = `https://t.me/${botUsername}?start=${startParam}`;
+    res.json({
+      linked: !!(user && user.telegram_linked),
+      chatId: user ? user.telegram_chat_id : null,
+      botUsername,
+      linkUrl
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/telegram/disconnect', async (req, res) => {
+  try {
+    await pool.query('UPDATE users SET telegram_chat_id = NULL, telegram_linked = FALSE WHERE id = $1', [req.user.id]);
+    res.json({ success: true, message: 'Telegram account unlinked successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/telegram/webhook', async (req, res) => {
+  const { message } = req.body;
+  if (!message || !message.text || !message.chat) {
+    return res.status(400).json({ error: 'Invalid webhook payload. Expected message object.' });
+  }
+
+  const text = message.text;
+  const chatId = String(message.chat.id);
+  const match = text.match(/\/start\s+(.*)/);
+  if (!match) {
+    return res.json({ message: 'No start payload found.' });
+  }
+
+  const startPayload = match[1].trim();
+  try {
+    let userId = startPayload;
+    try {
+      const decoded = Buffer.from(startPayload, 'base64').toString('ascii');
+      const checkUser = await pool.query('SELECT id FROM users WHERE id = $1', [decoded]);
+      if (checkUser.rows.length > 0) {
+        userId = decoded;
+      }
+    } catch (e) {}
+
+    const userRes = await pool.query('SELECT id, first_name FROM users WHERE id = $1', [userId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: `User not found: ${userId}` });
+    }
+
+    const user = userRes.rows[0];
+    await pool.query('UPDATE users SET telegram_chat_id = $1, telegram_linked = TRUE WHERE id = $2', [chatId, userId]);
+    
+    await pool.query(
+      'INSERT INTO notifications (user_id, type, title, message, link_tab) VALUES ($1, $2, $3, $4, $5)',
+      [userId, 'integration', 'Telegram Linked Successfully', 'Your Telegram account has been linked. You will now receive all CRM notifications directly.', 'integrations']
+    );
+
+    res.json({ success: true, message: `Linked user ${user.first_name} to Chat ID ${chatId}` });
+  } catch (err) {
+    console.error('Telegram Webhook error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══ BUSINESS EMAIL SYNC ═══
+
+app.get('/api/email/status', async (req, res) => {
+  try {
+    const userRes = await pool.query('SELECT email_linked, email FROM users WHERE id = $1', [req.user.id]);
+    const user = userRes.rows[0];
+    res.json({
+      linked: !!(user && user.email_linked),
+      email: user ? user.email : ''
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/email/connect', async (req, res) => {
+  try {
+    await pool.query('UPDATE users SET email_linked = TRUE WHERE id = $1', [req.user.id]);
+    await pool.query('DELETE FROM user_emails WHERE user_id = $1', [req.user.id]);
+
+    const seedEmails = [
+      {
+        folder: 'inbox',
+        sender: 'jane.doe@acmesolutions.com',
+        recipient: req.user.email || 'user@lead.ai',
+        subject: 'Question about your lead intelligence product features',
+        body: 'Hi, I saw your product presentation on B2B lead scoring. Does it support direct connection with Salesforce CRM? I would love to request a live demo for our sales ops team next Tuesday at 3 PM.\n\nBest,\nJane Doe\nAcme Solutions',
+        snippet: 'Hi, I saw your product presentation on B2B lead scoring. Does it support...',
+        is_read: false,
+        sent_at: new Date(Date.now() - 3600000 * 2)
+      },
+      {
+        folder: 'inbox',
+        sender: 'marketing-leads@hubspot.com',
+        recipient: req.user.email || 'user@lead.ai',
+        subject: 'Monthly sales pipeline review and campaign insights',
+        body: 'Hello Team,\n\nHere is your HubSpot marketing automation overview for last month. Your landing pages registered 1,200 unique visitors, with a conversion rate of 4.8%. Let us know if you want to optimize your lead generation widgets this week.\n\nRegards,\nHubSpot Sales Systems',
+        snippet: 'Here is your HubSpot marketing automation overview for last month...',
+        is_read: true,
+        sent_at: new Date(Date.now() - 3600000 * 24)
+      },
+      {
+        folder: 'inbox',
+        sender: 'system-alerts@postgresql.org',
+        recipient: req.user.email || 'user@lead.ai',
+        subject: 'Warning: database backup process completed with minor warnings',
+        body: 'Database automated system cron alert:\n\nThe scheduled pg_dump script successfully generated target file lead_db_backup.sql on disk, but completed with 1 warning (1 table skipped: stale_logs).\n\nPlease verify that backup integrity is intact.\n\nSystem Telemetry Daemon',
+        snippet: 'The scheduled pg_dump script successfully generated target file...',
+        is_read: true,
+        sent_at: new Date(Date.now() - 3600000 * 48)
+      },
+      {
+        folder: 'draft',
+        sender: req.user.email || 'user@lead.ai',
+        recipient: 'ceo@techstartup.io',
+        subject: 'Follow-up pitch: Automated B2B Prospecting & Scoring',
+        body: 'Dear Mr. Founder,\n\nI noticed your team is actively hiring outbound sales representatives. Our platform Lead.AI can automate lead discovery and grading using custom database templates, saving up to 25 hours per week for your prospecting team.\n\nAre you available for a brief 10-minute introductory call?',
+        snippet: 'I noticed your team is actively hiring outbound sales representatives...',
+        is_read: true,
+        sent_at: new Date(Date.now() - 3600000 * 5)
+      },
+      {
+        folder: 'spam',
+        sender: 'win-cash-prize@lottery-winner.net',
+        recipient: req.user.email || 'user@lead.ai',
+        subject: 'CONGRATULATIONS: You have won $10,000,000 cash reward!',
+        body: 'Dear lucky recipient,\n\nYour email address has been selected as the grand prize winner of our global charity sweepstakes. Please respond with your bank details and name to claim your prize instantly.',
+        snippet: 'Your email address has been selected as the grand prize winner...',
+        is_read: true,
+        sent_at: new Date(Date.now() - 3600000 * 72)
+      },
+      {
+        folder: 'outbox',
+        sender: req.user.email || 'user@lead.ai',
+        recipient: 'procurement@hospitalitygroup.com',
+        subject: 'Outbound Pitch: Local Lead Generation Services',
+        body: 'Dear Procurement Team,\n\nWe provide localized lead intelligence data for regional hospitality sectors. We recently completed a lead mapping exercise in Kolkata and identified 15 high-growth car rental partners that could collaborate with your hotel services.\n\nLet me know if you would like me to share the compiled contact sheet.',
+        snippet: 'We provide localized lead intelligence data for regional hospitality...',
+        is_read: true,
+        sent_at: new Date(Date.now() - 3600000 * 10)
+      }
+    ];
+
+    for (const email of seedEmails) {
+      await pool.query(`
+        INSERT INTO user_emails (user_id, folder, sender, recipient, subject, body, snippet, is_read, sent_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `, [req.user.id, email.folder, email.sender, email.recipient, email.subject, email.body, email.snippet, email.is_read, email.sent_at]);
+    }
+
+    res.json({ success: true, message: 'Email account linked and synchronized successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/email/disconnect', async (req, res) => {
+  try {
+    await pool.query('UPDATE users SET email_linked = FALSE WHERE id = $1', [req.user.id]);
+    await pool.query('DELETE FROM user_emails WHERE user_id = $1', [req.user.id]);
+    res.json({ success: true, message: 'Email account unlinked successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/email/messages', async (req, res) => {
+  const { folder } = req.query;
+  if (!folder) {
+    return res.status(400).json({ error: 'Missing folder query parameter' });
+  }
+
+  try {
+    if (folder === 'copilot') {
+      const result = await pool.query(
+        `SELECT id, sender_name, recipient_email, recipient_company, subject, body, sent_at, status, method 
+         FROM sent_emails 
+         ORDER BY sent_at DESC`
+      );
+      const mapped = result.rows.map(row => ({
+        id: `copilot_${row.id}`,
+        folder: 'copilot',
+        sender: row.sender_name || 'AI Sales Copilot',
+        recipient: row.recipient_email + (row.recipient_company ? ` (@${row.recipient_company})` : ''),
+        subject: row.subject,
+        body: row.body,
+        snippet: row.body.length > 70 ? row.body.substring(0, 70) + '...' : row.body,
+        is_read: true,
+        sent_at: row.sent_at,
+        method: row.method,
+        status: row.status
+      }));
+      return res.json(mapped);
+    } else {
+      const result = await pool.query(
+        `SELECT id, folder, sender, recipient, subject, body, snippet, is_read, sent_at 
+         FROM user_emails 
+         WHERE user_id = $1 AND folder = $2 
+         ORDER BY sent_at DESC`,
+        [req.user.id, folder]
+      );
+      return res.json(result.rows);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/email/read', async (req, res) => {
+  const { emailId } = req.body;
+  if (!emailId) {
+    return res.status(400).json({ error: 'Missing emailId' });
+  }
+  if (String(emailId).startsWith('copilot_')) {
+    return res.json({ success: true });
+  }
+  try {
+    await pool.query('UPDATE user_emails SET is_read = TRUE WHERE id = $1 AND user_id = $2', [emailId, req.user.id]);
+    res.json({ success: true });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

@@ -210,3 +210,22 @@ CREATE TABLE IF NOT EXISTS sent_emails (
 );
 CREATE INDEX IF NOT EXISTS idx_sent_emails_date ON sent_emails(sent_at DESC);
 
+-- Telegram and Business Email Sync Extensions
+ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_linked BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_linked BOOLEAN DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS user_emails (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) REFERENCES users(id) ON DELETE CASCADE,
+    folder VARCHAR(50) NOT NULL, -- 'inbox', 'draft', 'outbox', 'spam'
+    sender VARCHAR(255) NOT NULL,
+    recipient VARCHAR(255) NOT NULL,
+    subject VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    snippet VARCHAR(255),
+    is_read BOOLEAN DEFAULT FALSE,
+    sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_user_emails_user_folder ON user_emails(user_id, folder);
+

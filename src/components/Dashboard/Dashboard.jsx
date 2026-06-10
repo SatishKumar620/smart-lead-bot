@@ -332,6 +332,11 @@ const Dashboard = () => {
   const [outboxSearch, setOutboxSearch] = useState('');
   const [selectedOutboxEmail, setSelectedOutboxEmail] = useState(null);
   const [outboxLoading, setOutboxLoading] = useState(false);
+  
+  // Telegram & Email Sync States
+  const [telegramStatus, setTelegramStatus] = useState({ linked: false, botUsername: '', linkUrl: '' });
+  const [emailStatus, setEmailStatus] = useState({ linked: false, email: '' });
+  const [emailFolder, setEmailFolder] = useState('inbox'); // inbox, draft, outbox, copilot, spam
 
   // Welcome popup on mount
   useEffect(() => {
@@ -350,8 +355,14 @@ const Dashboard = () => {
     fetchIngestTemplates();
     fetchGoogleStatus();
     fetchGoogleForms();
-    fetchOutboxHistory();
+    fetchTelegramStatus();
+    fetchEmailStatus();
   }, []);
+
+  // Sync outbox / email client dynamically based on selected folder and email connection status
+  useEffect(() => {
+    fetchOutboxHistory();
+  }, [emailFolder, emailStatus.linked]);
 
   // Keep googleFormFields in sync with ingestFields
   useEffect(() => {
@@ -399,10 +410,25 @@ const Dashboard = () => {
     } catch (e) { console.error(e); }
   };
 
-  const fetchOutboxHistory = async () => {
+  const fetchTelegramStatus = async () => {
+    try {
+      const res = await authenticatedFetch('/api/telegram/status');
+      if (res.ok) setTelegramStatus(await res.json());
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchEmailStatus = async () => {
+    try {
+      const res = await authenticatedFetch('/api/email/status');
+      if (res.ok) setEmailStatus(await res.json());
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchOutboxHistory = async (targetFolder = emailFolder) => {
     setOutboxLoading(true);
     try {
-      const res = await authenticatedFetch('/api/outbox');
+      const folderToFetch = emailStatus.linked ? targetFolder : 'copilot';
+      const res = await authenticatedFetch(`/api/email/messages?folder=${folderToFetch}`);
       if (res.ok) {
         setOutboxEmails(await res.json());
       }
@@ -411,6 +437,67 @@ const Dashboard = () => {
     } finally {
       setOutboxLoading(false);
     }
+  };
+
+  const handleConnectTelegram = () => {
+    if (telegramStatus.linkUrl) {
+      window.open(telegramStatus.linkUrl, '_blank');
+      const interval = setInterval(async () => {
+        try {
+          const res = await authenticatedFetch('/api/telegram/status');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.linked) {
+              setTelegramStatus(data);
+              clearInterval(interval);
+            }
+          }
+        } catch (e) { clearInterval(interval); }
+      }, 3000);
+      setTimeout(() => clearInterval(interval), 120000);
+    }
+  };
+
+  const handleDisconnectTelegram = async () => {
+    if (!window.confirm("Are you sure you want to disconnect Telegram sync?")) return;
+    try {
+      const res = await authenticatedFetch('/api/telegram/disconnect', { method: 'POST' });
+      if (res.ok) fetchTelegramStatus();
+    } catch (e) { console.error(e); }
+  };
+
+  const handleConnectEmail = async () => {
+    try {
+      const res = await authenticatedFetch('/api/email/connect', { method: 'POST' });
+      if (res.ok) {
+        fetchEmailStatus();
+        setEmailFolder('inbox');
+        setSelectedOutboxEmail(null);
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const handleDisconnectEmail = async () => {
+    if (!window.confirm("Are you sure you want to disconnect email integration? This will clear synced local copies.")) return;
+    try {
+      const res = await authenticatedFetch('/api/email/disconnect', { method: 'POST' });
+      if (res.ok) {
+        fetchEmailStatus();
+        setEmailFolder('inbox');
+        setSelectedOutboxEmail(null);
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const markEmailAsRead = async (emailId) => {
+    try {
+      await authenticatedFetch('/api/email/read', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailId })
+      });
+      setOutboxEmails(prev => prev.map(m => m.id === emailId ? { ...m, is_read: true } : m));
+    } catch (e) { console.error(e); }
   };
 
   const saveGoogleCredentials = async (e) => {
@@ -4032,8 +4119,112 @@ const Dashboard = () => {
                     </div>
                   </div>
 
+              </div>
+            </div>
+
+              {/* ═══ MESSAGING & COMMUNICATION CHANNELS ═══ */}
+              <div style={{ marginTop: '16px', borderTop: '1px solid var(--line)', paddingTop: '32px' }}>
+                <div style={{ marginBottom: '20px' }}>
+                  <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--cream)', margin: '0 0 4px 0', fontFamily: "'Manrope', sans-serif" }}>Communication Channels & Sync</h2>
+                  <p style={{ fontSize: '12px', color: 'var(--fog)', margin: 0 }}>Sync your business messaging apps and email client directly to receive telemetry logs and manage client communications.</p>
                 </div>
 
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                  {/* Card 1: Telegram Notifications Link */}
+                  <div className="nlp-console-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div>
+                      <div className="db-card-title-wrap" style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span className="db-card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                            </svg>
+                            Telegram Messaging Link
+                          </span>
+                        </div>
+                        <span className={`outbox-badge status-${telegramStatus.linked ? 'sent' : 'failed'}`}>
+                          {telegramStatus.linked ? 'Linked' : 'Not Linked'}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '12px', color: 'var(--fog)', lineHeight: '1.5', margin: '0 0 20px 0' }}>
+                        Enable automated Telegram notification dispatching. Once authorized, the bot will automatically forward all CRM telemetry, lead generation status alerts, and delegated task updates directly to your chat feed.
+                      </p>
+                      {telegramStatus.linked && (
+                        <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--line2)', borderRadius: '6px', fontSize: '12px', color: 'var(--mist)', marginBottom: '20px' }}>
+                          Linked Chat ID: <strong style={{ color: 'var(--gold)', fontFamily: 'monospace' }}>{telegramStatus.chatId}</strong>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      {!telegramStatus.linked ? (
+                        <button
+                          onClick={handleConnectTelegram}
+                          className="nlp-submit-btn"
+                          style={{ width: '100%', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
+                          Connect Telegram Account ↗
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleDisconnectTelegram}
+                          className="crm-act-btn"
+                          style={{ width: '100%', padding: '12px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}
+                        >
+                          Unlink Telegram Account
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card 2: Business Email Sync */}
+                  <div className="nlp-console-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div>
+                      <div className="db-card-title-wrap" style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span className="db-card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                              <polyline points="22,6 12,13 2,6" />
+                            </svg>
+                            Business Email Client Sync
+                          </span>
+                        </div>
+                        <span className={`outbox-badge status-${emailStatus.linked ? 'sent' : 'failed'}`}>
+                          {emailStatus.linked ? 'Connected' : 'Not Configured'}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '12px', color: 'var(--fog)', lineHeight: '1.5', margin: '0 0 20px 0' }}>
+                        Sync your company email account with the CRM. Connecting will synchronize Inbox, Drafts, and Spam folders directly into your sliding Outbox history panel, allowing side-by-side management with AI Copilot pitches.
+                      </p>
+                      {emailStatus.linked && (
+                        <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--line2)', borderRadius: '6px', fontSize: '12px', color: 'var(--mist)', marginBottom: '20px' }}>
+                          Connected Account: <strong style={{ color: 'var(--gold)' }}>{currentUser?.email || emailStatus.email || 'business@lead.ai'}</strong>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      {!emailStatus.linked ? (
+                        <button
+                          onClick={handleConnectEmail}
+                          className="nlp-submit-btn"
+                          style={{ width: '100%', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></svg>
+                          Connect Business Email Account
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleDisconnectEmail}
+                          className="crm-act-btn"
+                          style={{ width: '100%', padding: '12px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}
+                        >
+                          Unlink Email Account & Clear Cache
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
             </div>
@@ -4986,7 +5177,7 @@ const Dashboard = () => {
                   <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
                   <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
                 </svg>
-                <h2>Outbox History</h2>
+                <h2>Communication & Outbox Console</h2>
               </div>
               <button className="outbox-close-btn" onClick={() => { setOutboxOpen(false); setSelectedOutboxEmail(null); }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -4997,7 +5188,58 @@ const Dashboard = () => {
             </div>
 
             <div className="outbox-drawer-body-wrap">
-              {/* Left Column: Email List & Search */}
+              {/* Left Column: Folders Sidebar */}
+              <div className="outbox-folders-bar">
+                <button
+                  className={`folder-item ${emailFolder === 'inbox' ? 'active' : ''} ${!emailStatus.linked ? 'locked' : ''}`}
+                  onClick={() => { setEmailFolder('inbox'); setSelectedOutboxEmail(null); }}
+                >
+                  <svg className="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                  <span>Inbox</span>
+                  {!emailStatus.linked && (
+                    <svg className="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  )}
+                </button>
+                <button
+                  className={`folder-item ${emailFolder === 'draft' ? 'active' : ''} ${!emailStatus.linked ? 'locked' : ''}`}
+                  onClick={() => { setEmailFolder('draft'); setSelectedOutboxEmail(null); }}
+                >
+                  <svg className="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  <span>Drafts</span>
+                  {!emailStatus.linked && (
+                    <svg className="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  )}
+                </button>
+                <button
+                  className={`folder-item ${emailFolder === 'outbox' ? 'active' : ''} ${!emailStatus.linked ? 'locked' : ''}`}
+                  onClick={() => { setEmailFolder('outbox'); setSelectedOutboxEmail(null); }}
+                >
+                  <svg className="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  <span>Outbox</span>
+                  {!emailStatus.linked && (
+                    <svg className="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  )}
+                </button>
+                <button
+                  className={`folder-item ${emailFolder === 'copilot' ? 'active' : ''}`}
+                  onClick={() => { setEmailFolder('copilot'); setSelectedOutboxEmail(null); }}
+                >
+                  <svg className="folder-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></svg>
+                  <span style={{ color: 'var(--gold)' }}>AI Copilot</span>
+                </button>
+                <button
+                  className={`folder-item ${emailFolder === 'spam' ? 'active' : ''} ${!emailStatus.linked ? 'locked' : ''}`}
+                  onClick={() => { setEmailFolder('spam'); setSelectedOutboxEmail(null); }}
+                >
+                  <svg className="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                  <span>Spam</span>
+                  {!emailStatus.linked && (
+                    <svg className="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  )}
+                </button>
+              </div>
+
+              {/* Middle Column: Email List & Search */}
               <div className="outbox-list-pane">
                 <div className="outbox-search-wrap">
                   <svg className="outbox-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -5005,7 +5247,7 @@ const Dashboard = () => {
                   </svg>
                   <input
                     type="text"
-                    placeholder="Search recipient, subject, company..."
+                    placeholder="Search sender, subject..."
                     value={outboxSearch}
                     onChange={(e) => setOutboxSearch(e.target.value)}
                     className="outbox-search-input"
@@ -5015,21 +5257,42 @@ const Dashboard = () => {
                   )}
                 </div>
 
-                {outboxLoading ? (
+                {!emailStatus.linked && emailFolder !== 'copilot' ? (
+                  <div className="outbox-empty-state" style={{ padding: '40px 20px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ width: '48px', height: '48px', color: 'var(--gold)', marginBottom: '12px', opacity: 0.8 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    <h3 style={{ fontSize: '14px', color: 'var(--cream)', margin: '0 0 8px 0', fontFamily: "'Manrope', sans-serif" }}>Email Sync Required</h3>
+                    <p style={{ fontSize: '11px', color: 'var(--fog)', lineHeight: '1.5', marginBottom: '20px' }}>
+                      This folder requires a connected business email account. Link your email directly with one click to synchronize folder messages.
+                    </p>
+                    <button
+                      onClick={handleConnectEmail}
+                      className="nlp-submit-btn"
+                      style={{ padding: '10px 16px', fontSize: '11px', alignSelf: 'center' }}
+                    >
+                      Connect Business Email
+                    </button>
+                  </div>
+                ) : outboxLoading ? (
                   <div className="outbox-loading-state">
                     <div className="outbox-spinner"></div>
-                    <p>Loading outbox history...</p>
+                    <p>Loading folder messages...</p>
                   </div>
                 ) : (
                   <div className="outbox-list">
                     {(() => {
                       const filtered = outboxEmails.filter(email => {
                         const q = outboxSearch.toLowerCase();
+                        const sender = email.sender || '';
+                        const recipient = email.recipient || email.recipient_email || '';
+                        const subject = email.subject || '';
+                        const body = email.body || '';
                         return (
-                          email.recipient_email?.toLowerCase().includes(q) ||
-                          email.recipient_company?.toLowerCase().includes(q) ||
-                          email.subject?.toLowerCase().includes(q) ||
-                          email.body?.toLowerCase().includes(q)
+                          sender.toLowerCase().includes(q) ||
+                          recipient.toLowerCase().includes(q) ||
+                          subject.toLowerCase().includes(q) ||
+                          body.toLowerCase().includes(q)
                         );
                       });
 
@@ -5040,7 +5303,7 @@ const Dashboard = () => {
                               <circle cx="12" cy="12" r="10" />
                               <line x1="8" y1="12" x2="16" y2="12" />
                             </svg>
-                            <p>No outbox logs found</p>
+                            <p>No messages found</p>
                           </div>
                         );
                       }
@@ -5054,27 +5317,35 @@ const Dashboard = () => {
                         return (
                           <div
                             key={email.id}
-                            className={`outbox-item ${isSelected ? 'selected' : ''}`}
-                            onClick={() => setSelectedOutboxEmail(email)}
+                            className={`outbox-item ${isSelected ? 'selected' : ''} ${!email.is_read ? 'unread' : ''}`}
+                            onClick={() => {
+                              setSelectedOutboxEmail(email);
+                              if (!email.is_read) {
+                                markEmailAsRead(email.id);
+                              }
+                            }}
                           >
                             <div className="outbox-item-header">
-                              <span className="outbox-item-recipient" title={email.recipient_email}>
-                                {email.recipient_email}
+                              <span className="outbox-item-recipient" title={emailFolder === 'inbox' ? email.sender : email.recipient}>
+                                {emailFolder === 'inbox' ? email.sender : email.recipient}
                               </span>
                               <span className="outbox-item-time">{dateStr}</span>
                             </div>
-                            {email.recipient_company && (
-                              <div className="outbox-item-company">@{email.recipient_company}</div>
-                            )}
-                            <div className="outbox-item-subject">{email.subject}</div>
-                            <div className="outbox-item-meta">
-                              <span className={`outbox-badge method-${email.method || 'mock'}`}>
-                                {email.method || 'mock'}
-                              </span>
-                              <span className={`outbox-badge status-${email.status || 'sent'}`}>
-                                {email.status || 'sent'}
-                              </span>
+                            <div className="outbox-item-subject">
+                              {!email.is_read && <span className="unread-dot"></span>}
+                              {email.subject}
                             </div>
+                            <div className="outbox-item-snippet">{email.snippet}</div>
+                            {email.method && (
+                              <div className="outbox-item-meta">
+                                <span className={`outbox-badge method-${email.method}`}>
+                                  {email.method}
+                                </span>
+                                <span className={`outbox-badge status-${email.status}`}>
+                                  {email.status}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         );
                       });
@@ -5085,20 +5356,27 @@ const Dashboard = () => {
 
               {/* Right Column: Email Detail Preview */}
               <div className="outbox-detail-pane">
-                {selectedOutboxEmail ? (
+                {!emailStatus.linked && emailFolder !== 'copilot' ? (
+                  <div className="outbox-detail-placeholder">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                      <rect x="2" y="4" width="20" height="16" rx="2" />
+                      <path d="M22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                    </svg>
+                    <p>Connect your business email to view and manage correspondence in this folder.</p>
+                  </div>
+                ) : selectedOutboxEmail ? (
                   <div className="outbox-email-detail">
                     <div className="outbox-detail-header">
                       <div className="outbox-detail-row">
                         <span className="detail-label">To:</span>
                         <span className="detail-value text-highlight">
-                          {selectedOutboxEmail.recipient_email}
-                          {selectedOutboxEmail.recipient_company && ` (${selectedOutboxEmail.recipient_company})`}
+                          {selectedOutboxEmail.recipient}
                         </span>
                       </div>
                       <div className="outbox-detail-row">
                         <span className="detail-label">From:</span>
                         <span className="detail-value">
-                          {selectedOutboxEmail.sender_name || 'AI Sales Copilot'}
+                          {selectedOutboxEmail.sender}
                         </span>
                       </div>
                       <div className="outbox-detail-row">
@@ -5109,22 +5387,26 @@ const Dashboard = () => {
                             : 'Unknown'}
                         </span>
                       </div>
-                      <div className="outbox-detail-row">
-                        <span className="detail-label">Method:</span>
-                        <span className="detail-value">
-                          <span className={`outbox-badge method-${selectedOutboxEmail.method || 'mock'}`}>
-                            {selectedOutboxEmail.method || 'mock'}
+                      {selectedOutboxEmail.method && (
+                        <div className="outbox-detail-row">
+                          <span className="detail-label">Method:</span>
+                          <span className="detail-value">
+                            <span className={`outbox-badge method-${selectedOutboxEmail.method}`}>
+                              {selectedOutboxEmail.method}
+                            </span>
                           </span>
-                        </span>
-                      </div>
-                      <div className="outbox-detail-row">
-                        <span className="detail-label">Status:</span>
-                        <span className="detail-value">
-                          <span className={`outbox-badge status-${selectedOutboxEmail.status || 'sent'}`}>
-                            {selectedOutboxEmail.status || 'sent'}
+                        </div>
+                      )}
+                      {selectedOutboxEmail.status && (
+                        <div className="outbox-detail-row">
+                          <span className="detail-label">Status:</span>
+                          <span className="detail-value">
+                            <span className={`outbox-badge status-${selectedOutboxEmail.status}`}>
+                              {selectedOutboxEmail.status}
+                            </span>
                           </span>
-                        </span>
-                      </div>
+                        </div>
+                      )}
                       <div className="outbox-detail-subject">
                         {selectedOutboxEmail.subject}
                       </div>

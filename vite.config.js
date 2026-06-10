@@ -231,7 +231,6 @@ pool.query(`
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
 
-  -- Store sent email logs/outbox history
   CREATE TABLE IF NOT EXISTS sent_emails (
       id SERIAL PRIMARY KEY,
       sender_id VARCHAR(255) REFERENCES users(id) ON DELETE SET NULL,
@@ -245,6 +244,25 @@ pool.query(`
       sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
   CREATE INDEX IF NOT EXISTS idx_sent_emails_date ON sent_emails(sent_at DESC);
+
+  -- Telegram and Business Email Sync Extensions
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(255);
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_linked BOOLEAN DEFAULT FALSE;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS email_linked BOOLEAN DEFAULT FALSE;
+
+  CREATE TABLE IF NOT EXISTS user_emails (
+      id SERIAL PRIMARY KEY,
+      user_id VARCHAR(255) REFERENCES users(id) ON DELETE CASCADE,
+      folder VARCHAR(50) NOT NULL,
+      sender VARCHAR(255) NOT NULL,
+      recipient VARCHAR(255) NOT NULL,
+      subject VARCHAR(255) NOT NULL,
+      body TEXT NOT NULL,
+      snippet VARCHAR(255),
+      is_read BOOLEAN DEFAULT FALSE,
+      sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_user_emails_user_folder ON user_emails(user_id, folder);
 `).then(() => {
   console.log('PostgreSQL: chat_memory and CRM extension tables verified/created.')
 }).catch(err => {
@@ -370,7 +388,7 @@ export default defineConfig({
           }
 
           // Route Protection Middleware
-          if (req.url && req.url.startsWith('/api/') && !req.url.startsWith('/api/auth/')) {
+          if (req.url && req.url.startsWith('/api/') && !req.url.startsWith('/api/auth/') && !req.url.startsWith('/api/telegram/webhook')) {
             const authHeader = req.headers['authorization']
             let token = ''
             if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -577,39 +595,38 @@ export default defineConfig({
             req.on('data', chunk => { bodyStr += chunk; });
             req.on('end', async () => {
               try {
-                const { leadId, assignedTo, title, description, priority, dueDate } = JSON.parse(bodyStr);
-                if (!leadId || !assignedTo || !title) {
+                const { leadId, assignedTo, assignedUserIds, title, description, priority, dueDate, teamName } = JSON.parse(bodyStr);
+                const targetAssignees = assignedUserIds || (assignedTo ? [assignedTo] : []);
+                if (!title || targetAssignees.length === 0) {
                   res.statusCode = 400;
-                  res.end(JSON.stringify({ error: 'Missing leadId, assignedTo, or title' }));
+                  res.end(JSON.stringify({ error: 'Missing title or assignees' }));
                   return;
                 }
 
+                const firstAssignee = targetAssignees[0];
+
                 const taskRes = await pool.query(`
-                  INSERT INTO tasks (lead_id, assigned_to, title, description, priority, due_date)
-                  VALUES ($1, $2, $3, $4, $5, $6)
+                  INSERT INTO tasks (lead_id, assigned_to, title, description, priority, due_date, team_name)
+                  VALUES ($1, $2, $3, $4, $5, $6, $7)
                   RETURNING *
-                `, [leadId, assignedTo, title, description || '', priority || 'Medium', dueDate || null]);
+                `, [leadId || null, firstAssignee, title, description || '', priority || 'Medium', dueDate || null, teamName || null]);
                 
                 const newTask = taskRes.rows[0];
 
-                const leadCheck = await pool.query('SELECT name FROM leads WHERE lead_id = $1', [leadId]);
-                const leadName = leadCheck.rows.length > 0 ? leadCheck.rows[0].name : 'Unknown Lead';
-                
-                const userCheck = await pool.query('SELECT first_name, last_name, email FROM users WHERE id = $1', [assignedTo]);
-                if (userCheck.rows.length > 0) {
-                  const userName = `${userCheck.rows[0].first_name} ${userCheck.rows[0].last_name}`.trim();
-                  const userEmail = userCheck.rows[0].email;
+                for (const userId of targetAssignees) {
+                  await pool.query(
+                    'INSERT INTO task_assignments (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                    [newTask.id, userId]
+                  );
+                }
 
+                if (leadId) {
+                  const leadCheck = await pool.query('SELECT name FROM leads WHERE lead_id = $1', [leadId]);
+                  const leadName = leadCheck.rows.length > 0 ? leadCheck.rows[0].name : 'Unknown Lead';
                   await pool.query(
                     'INSERT INTO lead_activities (lead_id, user_id, action_type, description) VALUES ($1, $2, $3, $4)',
-                    [leadId, req.user.id, 'Task Logged', `Created task "${title}" and delegated to "${userName}".`]
+                    [leadId, req.user.id, 'Task Logged', `Created task "${title}".`]
                   );
-
-                  if (userEmail) {
-                    const subject = `📋 Task Delegated: ${title}`;
-                    const bodyText = `Hello,\n\nYou have been assigned a new task: "${title}" inside B2B Lead Intelligence Coordinator.\n\nTask Details:\n- Parent Lead: ${leadName}\n- Priority: ${priority}\n- Due Date: ${dueDate || 'None'}\n- Description: ${description || 'No description provided'}\n\nPlease update your progress inside your CRM Task Board.\n\nBest regards,\nCRM Coordinator Bot`;
-                    await sendResendEmail(userEmail, subject, bodyText);
-                  }
                 }
 
                 res.statusCode = 200;
@@ -2289,6 +2306,295 @@ ${JSON.stringify(leadsData)}`
                 res.end(JSON.stringify({ message: `Successfully synced! Imported ${importedCount} new leads.`, count: importedCount }))
               } catch (err) {
                 console.error('Google Form Sync Error:', err.message)
+                res.statusCode = 500
+                res.end(JSON.stringify({ error: err.message }))
+              }
+            })
+            return
+          }
+
+          // ═══ TELEGRAM BOT INTEGRATION ═══
+          if (req.url && req.url.startsWith('/api/telegram/status') && req.method === 'GET') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+              const userRes = await pool.query('SELECT telegram_linked, telegram_chat_id FROM users WHERE id = $1', [req.user.id])
+              const user = userRes.rows[0]
+              const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'smart_lead_prospector_bot'
+              const startParam = Buffer.from(req.user.id).toString('base64').replace(/=/g, '')
+              const linkUrl = `https://t.me/${botUsername}?start=${startParam}`
+              res.statusCode = 200
+              res.end(JSON.stringify({
+                linked: !!(user && user.telegram_linked),
+                chatId: user ? user.telegram_chat_id : null,
+                botUsername,
+                linkUrl
+              }))
+            } catch (err) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ error: err.message }))
+            }
+            return
+          }
+
+          if (req.url && req.url.startsWith('/api/telegram/disconnect') && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+              await pool.query('UPDATE users SET telegram_chat_id = NULL, telegram_linked = FALSE WHERE id = $1', [req.user.id])
+              res.statusCode = 200
+              res.end(JSON.stringify({ success: true, message: 'Telegram account unlinked successfully.' }))
+            } catch (err) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ error: err.message }))
+            }
+            return
+          }
+
+          if (req.url && req.url.startsWith('/api/telegram/webhook') && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let bodyStr = ''
+            req.on('data', chunk => { bodyStr += chunk })
+            req.on('end', async () => {
+              try {
+                const { message } = JSON.parse(bodyStr)
+                if (!message || !message.text || !message.chat) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ error: 'Invalid webhook payload. Expected message object.' }))
+                  return
+                }
+
+                const text = message.text
+                const chatId = String(message.chat.id)
+                const match = text.match(/\/start\s+(.*)/)
+                if (!match) {
+                  res.statusCode = 200
+                  res.end(JSON.stringify({ message: 'No start payload found.' }))
+                  return
+                }
+
+                const startPayload = match[1].trim()
+                let userId = startPayload
+                try {
+                  const decoded = Buffer.from(startPayload, 'base64').toString('ascii')
+                  const checkUser = await pool.query('SELECT id FROM users WHERE id = $1', [decoded])
+                  if (checkUser.rows.length > 0) {
+                    userId = decoded
+                  }
+                } catch (e) {}
+
+                const userRes = await pool.query('SELECT id, first_name FROM users WHERE id = $1', [userId])
+                if (userRes.rows.length === 0) {
+                  res.statusCode = 404
+                  res.end(JSON.stringify({ error: `User not found: ${userId}` }))
+                  return
+                }
+
+                const user = userRes.rows[0]
+                await pool.query('UPDATE users SET telegram_chat_id = $1, telegram_linked = TRUE WHERE id = $2', [chatId, userId])
+                
+                await pool.query(
+                  'INSERT INTO notifications (user_id, type, title, message, link_tab) VALUES ($1, $2, $3, $4, $5)',
+                  [userId, 'integration', 'Telegram Linked Successfully', 'Your Telegram account has been linked. You will now receive all CRM notifications directly.', 'integrations']
+                )
+
+                res.statusCode = 200
+                res.end(JSON.stringify({ success: true, message: `Linked user ${user.first_name} to Chat ID ${chatId}` }))
+              } catch (err) {
+                console.error('Telegram Webhook error:', err.message)
+                res.statusCode = 500
+                res.end(JSON.stringify({ error: err.message }))
+              }
+            })
+            return
+          }
+
+          // ═══ BUSINESS EMAIL SYNC ═══
+          if (req.url && req.url.startsWith('/api/email/status') && req.method === 'GET') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+              const userRes = await pool.query('SELECT email_linked, email FROM users WHERE id = $1', [req.user.id])
+              const user = userRes.rows[0]
+              res.statusCode = 200
+              res.end(JSON.stringify({
+                linked: !!(user && user.email_linked),
+                email: user ? user.email : ''
+              }))
+            } catch (err) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ error: err.message }))
+            }
+            return
+          }
+
+          if (req.url && req.url.startsWith('/api/email/connect') && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+              await pool.query('UPDATE users SET email_linked = TRUE WHERE id = $1', [req.user.id])
+              await pool.query('DELETE FROM user_emails WHERE user_id = $1', [req.user.id])
+
+              const seedEmails = [
+                {
+                  folder: 'inbox',
+                  sender: 'jane.doe@acmesolutions.com',
+                  recipient: req.user.email || 'user@lead.ai',
+                  subject: 'Question about your lead intelligence product features',
+                  body: 'Hi, I saw your product presentation on B2B lead scoring. Does it support direct connection with Salesforce CRM? I would love to request a live demo for our sales ops team next Tuesday at 3 PM.\\n\\nBest,\\nJane Doe\\nAcme Solutions',
+                  snippet: 'Hi, I saw your product presentation on B2B lead scoring. Does it support...',
+                  is_read: false,
+                  sent_at: new Date(Date.now() - 3600000 * 2)
+                },
+                {
+                  folder: 'inbox',
+                  sender: 'marketing-leads@hubspot.com',
+                  recipient: req.user.email || 'user@lead.ai',
+                  subject: 'Monthly sales pipeline review and campaign insights',
+                  body: 'Hello Team,\\n\\nHere is your HubSpot marketing automation overview for last month. Your landing pages registered 1,200 unique visitors, with a conversion rate of 4.8%. Let us know if you want to optimize your lead generation widgets this week.\\n\\nRegards,\\nHubSpot Sales Systems',
+                  snippet: 'Here is your HubSpot marketing automation overview for last month...',
+                  is_read: true,
+                  sent_at: new Date(Date.now() - 3600000 * 24)
+                },
+                {
+                  folder: 'inbox',
+                  sender: 'system-alerts@postgresql.org',
+                  recipient: req.user.email || 'user@lead.ai',
+                  subject: 'Warning: database backup process completed with minor warnings',
+                  body: 'Database automated system cron alert:\\n\\nThe scheduled pg_dump script successfully generated target file lead_db_backup.sql on disk, but completed with 1 warning (1 table skipped: stale_logs).\\n\\nPlease verify that backup integrity is intact.\\n\\nSystem Telemetry Daemon',
+                  snippet: 'The scheduled pg_dump script successfully generated target file...',
+                  is_read: true,
+                  sent_at: new Date(Date.now() - 3600000 * 48)
+                },
+                {
+                  folder: 'draft',
+                  sender: req.user.email || 'user@lead.ai',
+                  recipient: 'ceo@techstartup.io',
+                  subject: 'Follow-up pitch: Automated B2B Prospecting & Scoring',
+                  body: 'Dear Mr. Founder,\\n\\nI noticed your team is actively hiring outbound sales representatives. Our platform Lead.AI can automate lead discovery and grading using custom database templates, saving up to 25 hours per week for your prospecting team.\\n\\nAre you available for a brief 10-minute introductory call?',
+                  snippet: 'I noticed your team is actively hiring outbound sales representatives...',
+                  is_read: true,
+                  sent_at: new Date(Date.now() - 3600000 * 5)
+                },
+                {
+                  folder: 'spam',
+                  sender: 'win-cash-prize@lottery-winner.net',
+                  recipient: req.user.email || 'user@lead.ai',
+                  subject: 'CONGRATULATIONS: You have won $10,000,000 cash reward!',
+                  body: 'Dear lucky recipient,\\n\\nYour email address has been selected as the grand prize winner of our global charity sweepstakes. Please respond with your bank details and name to claim your prize instantly.',
+                  snippet: 'Your email address has been selected as the grand prize winner...',
+                  is_read: true,
+                  sent_at: new Date(Date.now() - 3600000 * 72)
+                },
+                {
+                  folder: 'outbox',
+                  sender: req.user.email || 'user@lead.ai',
+                  recipient: 'procurement@hospitalitygroup.com',
+                  subject: 'Outbound Pitch: Local Lead Generation Services',
+                  body: 'Dear Procurement Team,\\n\\nWe provide localized lead intelligence data for regional hospitality sectors. We recently completed a lead mapping exercise in Kolkata and identified 15 high-growth car rental partners that could collaborate with your hotel services.\\n\\nLet me know if you would like me to share the compiled contact sheet.',
+                  snippet: 'We provide localized lead intelligence data for regional hospitality...',
+                  is_read: true,
+                  sent_at: new Date(Date.now() - 3600000 * 10)
+                }
+              ];
+
+              for (const email of seedEmails) {
+                await pool.query(`
+                  INSERT INTO user_emails (user_id, folder, sender, recipient, subject, body, snippet, is_read, sent_at)
+                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                `, [req.user.id, email.folder, email.sender, email.recipient, email.subject, email.body, email.snippet, email.is_read, email.sent_at])
+              }
+
+              res.statusCode = 200
+              res.end(JSON.stringify({ success: true, message: 'Email account linked and synchronized successfully.' }))
+            } catch (err) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ error: err.message }))
+            }
+            return
+          }
+
+          if (req.url && req.url.startsWith('/api/email/disconnect') && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+              await pool.query('UPDATE users SET email_linked = FALSE WHERE id = $1', [req.user.id])
+              await pool.query('DELETE FROM user_emails WHERE user_id = $1', [req.user.id])
+              res.statusCode = 200
+              res.end(JSON.stringify({ success: true, message: 'Email account unlinked successfully.' }))
+            } catch (err) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ error: err.message }))
+            }
+            return
+          }
+
+          if (req.url && req.url.startsWith('/api/email/messages') && req.method === 'GET') {
+            res.setHeader('Content-Type', 'application/json')
+            const urlObj = new URL(req.url, `http://${req.headers.host}`)
+            const folder = urlObj.searchParams.get('folder')
+            if (!folder) {
+              res.statusCode = 400
+              res.end(JSON.stringify({ error: 'Missing folder query parameter' }))
+              return
+            }
+
+            try {
+              if (folder === 'copilot') {
+                const result = await pool.query(
+                  `SELECT id, sender_name, recipient_email, recipient_company, subject, body, sent_at, status, method 
+                   FROM sent_emails 
+                   ORDER BY sent_at DESC`
+                )
+                const mapped = result.rows.map(row => ({
+                  id: `copilot_${row.id}`,
+                  folder: 'copilot',
+                  sender: row.sender_name || 'AI Sales Copilot',
+                  recipient: row.recipient_email + (row.recipient_company ? ` (@${row.recipient_company})` : ''),
+                  subject: row.subject,
+                  body: row.body,
+                  snippet: row.body.length > 70 ? row.body.substring(0, 70) + '...' : row.body,
+                  is_read: true,
+                  sent_at: row.sent_at,
+                  method: row.method,
+                  status: row.status
+                }))
+                res.statusCode = 200
+                res.end(JSON.stringify(mapped))
+              } else {
+                const result = await pool.query(
+                  `SELECT id, folder, sender, recipient, subject, body, snippet, is_read, sent_at 
+                   FROM user_emails 
+                   WHERE user_id = $1 AND folder = $2 
+                   ORDER BY sent_at DESC`,
+                  [req.user.id, folder]
+                )
+                res.statusCode = 200
+                res.end(JSON.stringify(result.rows))
+              }
+            } catch (err) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ error: err.message }))
+            }
+            return
+          }
+
+          if (req.url && req.url.startsWith('/api/email/read') && req.method === 'PUT') {
+            res.setHeader('Content-Type', 'application/json')
+            let bodyStr = ''
+            req.on('data', chunk => { bodyStr += chunk })
+            req.on('end', async () => {
+              try {
+                const { emailId } = JSON.parse(bodyStr)
+                if (!emailId) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ error: 'Missing emailId' }))
+                  return
+                }
+                if (String(emailId).startsWith('copilot_')) {
+                  res.statusCode = 200
+                  res.end(JSON.stringify({ success: true }))
+                  return
+                }
+                await pool.query('UPDATE user_emails SET is_read = TRUE WHERE id = $1 AND user_id = $2', [emailId, req.user.id])
+                res.statusCode = 200
+                res.end(JSON.stringify({ success: true }))
+              } catch (err) {
                 res.statusCode = 500
                 res.end(JSON.stringify({ error: err.message }))
               }
