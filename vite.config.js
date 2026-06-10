@@ -2569,10 +2569,16 @@ ${JSON.stringify(leadsData)}`
             try {
               const userRes = await pool.query('SELECT email_linked, email FROM users WHERE id = $1', [req.user.id])
               const user = userRes.rows[0]
+              
+              // Check if Google OAuth is connected
+              const googleRes = await pool.query("SELECT email FROM google_settings WHERE id = 'global'")
+              const googleConnected = googleRes.rows.length > 0 && !!googleRes.rows[0].email
+
               res.statusCode = 200
               res.end(JSON.stringify({
                 linked: !!(user && user.email_linked),
-                email: user ? user.email : ''
+                email: user ? user.email : '',
+                googleConnected
               }))
             } catch (err) {
               res.statusCode = 500
@@ -2720,7 +2726,7 @@ ${JSON.stringify(leadsData)}`
                     gmailMessages = await fetchGmailMessages(accessToken, folder)
                     if (gmailMessages && gmailMessages.length > 0) {
                       res.statusCode = 200
-                      res.end(JSON.stringify(gmailMessages))
+                      res.end(JSON.stringify(gmailMessages.map(m => ({ ...m, is_mock: false }))))
                       return
                     }
                   }
@@ -2736,7 +2742,7 @@ ${JSON.stringify(leadsData)}`
                   [req.user.id, folder]
                 )
                 res.statusCode = 200
-                res.end(JSON.stringify(result.rows))
+                res.end(JSON.stringify(result.rows.map(m => ({ ...m, is_mock: true }))))
               }
             } catch (err) {
               res.statusCode = 500

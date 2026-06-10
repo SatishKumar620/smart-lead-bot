@@ -3059,9 +3059,15 @@ app.get('/api/email/status', async (req, res) => {
   try {
     const userRes = await pool.query('SELECT email_linked, email FROM users WHERE id = $1', [req.user.id]);
     const user = userRes.rows[0];
+    
+    // Check if Google OAuth is connected
+    const googleRes = await pool.query("SELECT email FROM google_settings WHERE id = 'global'");
+    const googleConnected = googleRes.rows.length > 0 && !!googleRes.rows[0].email;
+
     res.json({
       linked: !!(user && user.email_linked),
-      email: user ? user.email : ''
+      email: user ? user.email : '',
+      googleConnected
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3193,7 +3199,7 @@ app.get('/api/email/messages', async (req, res) => {
         if (accessToken) {
           gmailMessages = await fetchGmailMessages(accessToken, folder);
           if (gmailMessages && gmailMessages.length > 0) {
-            return res.json(gmailMessages);
+            return res.json(gmailMessages.map(m => ({ ...m, is_mock: false })));
           }
         }
       } catch (e) {
@@ -3207,7 +3213,7 @@ app.get('/api/email/messages', async (req, res) => {
          ORDER BY sent_at DESC`,
         [req.user.id, folder]
       );
-      return res.json(result.rows);
+      return res.json(result.rows.map(m => ({ ...m, is_mock: true })));
     }
   } catch (err) {
     res.status(500).json({ error: err.message });

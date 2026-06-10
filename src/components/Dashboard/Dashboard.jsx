@@ -4198,8 +4198,8 @@ const Dashboard = () => {
                             Business Email Client Sync
                           </span>
                         </div>
-                        <span className={`outbox-badge status-${emailStatus.linked ? 'sent' : 'failed'}`}>
-                          {emailStatus.linked ? 'Connected' : 'Not Configured'}
+                        <span className={`outbox-badge status-${(emailStatus.linked && emailStatus.googleConnected) ? 'sent' : emailStatus.linked ? 'pending' : 'failed'}`}>
+                          {(emailStatus.linked && emailStatus.googleConnected) ? 'Connected' : emailStatus.linked ? 'Offline (Mock Backup)' : 'Not Configured'}
                         </span>
                       </div>
                       <p style={{ fontSize: '12px', color: 'var(--fog)', lineHeight: '1.5', margin: '0 0 20px 0' }}>
@@ -5289,6 +5289,29 @@ const Dashboard = () => {
                   </div>
                 ) : (
                   <div className="outbox-list">
+                    {outboxEmails.some(m => m.is_mock) && (
+                      <div style={{
+                        background: 'rgba(239, 68, 68, 0.08)',
+                        border: '1px solid rgba(239, 68, 68, 0.25)',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        margin: '12px',
+                        fontSize: '11px',
+                        color: '#f87171',
+                        lineHeight: '1.4',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}>
+                        <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                          Gmail Not Syncing (Using Mock Offline Backup)
+                        </div>
+                        <div style={{ color: 'var(--fog)' }}>
+                          To sync your real inbox, please go to the <strong>Integrations</strong> tab, save your Google Client Credentials, and click <strong>Connect with Google</strong>.
+                        </div>
+                      </div>
+                    )}
                     {(() => {
                       const filtered = outboxEmails.filter(email => {
                         const q = outboxSearch.toLowerCase();
