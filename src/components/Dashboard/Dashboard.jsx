@@ -324,6 +324,7 @@ const Dashboard = () => {
   const [googleConfigMessage, setGoogleConfigMessage] = useState('');
   const [googleFormFields, setGoogleFormFields] = useState([]);
   const [formCreateStatus, setFormCreateStatus] = useState('');
+  const [showCredentialsForm, setShowCredentialsForm] = useState(false);
 
   // Welcome popup on mount
   useEffect(() => {
@@ -3710,67 +3711,103 @@ const Dashboard = () => {
                     <span style={{ fontSize: '10px', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Google OAuth 2.0 Credentials API</span>
                   </div>
 
-                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--line)', padding: '14px', borderRadius: '8px', fontSize: '12px', color: 'var(--mist)', lineHeight: '1.6', marginBottom: '20px' }}>
-                    <strong style={{ color: 'var(--gold)', display: 'block', marginBottom: '6px' }}>Instruction Details:</strong>
-                    Go to the <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold)', textDecoration: 'underline' }}>Google Cloud Console</a>, create a project, enable the <strong>Google Forms API</strong>, and create an OAuth 2.0 Client ID. 
-                    <br />
-                    Add this callback URL to your <strong>Authorized Redirect URIs</strong>:
-                    <div style={{ margin: '8px 0', padding: '6px 10px', background: 'rgba(7,8,10,0.4)', border: '1px solid var(--line)', borderRadius: '6px', fontFamily: 'monospace', fontSize: '11px', color: 'var(--cream)', wordBreak: 'break-all' }}>
-                      {window.location.origin}/api/auth/google/callback
-                    </div>
-                  </div>
-
-                  <form onSubmit={saveGoogleCredentials} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Google Client ID</label>
-                      <input
-                        type="text"
-                        className="finder-input"
-                        required
-                        placeholder="Paste Client ID here..."
-                        value={googleClientConfig.client_id}
-                        onChange={e => setGoogleClientConfig({ ...googleClientConfig, client_id: e.target.value })}
-                        style={{ padding: '9px 12px', fontSize: '12px' }}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Google Client Secret</label>
-                      <input
-                        type="password"
-                        className="finder-input"
-                        required
-                        placeholder="Paste Client Secret here..."
-                        value={googleClientConfig.client_secret}
-                        onChange={e => setGoogleClientConfig({ ...googleClientConfig, client_secret: e.target.value })}
-                        style={{ padding: '9px 12px', fontSize: '12px' }}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Redirect URI</label>
-                      <input
-                        type="text"
-                        className="finder-input"
-                        required
-                        placeholder="e.g. http://localhost:5000/api/auth/google/callback"
-                        value={googleClientConfig.redirect_uri || `${window.location.origin}/api/auth/google/callback`}
-                        onChange={e => setGoogleClientConfig({ ...googleClientConfig, redirect_uri: e.target.value })}
-                        style={{ padding: '9px 12px', fontSize: '12px' }}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '6px' }}>
-                      <button type="submit" style={{ padding: '10px 20px', fontSize: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--cream)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>
-                        Save Credentials
-                      </button>
-                      {googleConfigMessage && (
-                        <span style={{ fontSize: '11px', color: googleConfigMessage.includes('success') ? '#4ade80' : 'var(--gold)' }}>
-                          {googleConfigMessage}
-                        </span>
+                  {googleStatus.envConfigured && (
+                    <div style={{ background: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.2)', padding: '16px', borderRadius: '8px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ background: 'rgba(56,189,248,0.15)', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#38bdf8', flexShrink: 0 }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '13px', color: 'var(--cream)', fontWeight: 600 }}>System Credentials Configured</div>
+                          <div style={{ fontSize: '11px', color: 'var(--fog)', marginTop: '2px' }}>One-click connection is active. You do not need to create or paste API keys.</div>
+                        </div>
+                      </div>
+                      {!showCredentialsForm && (
+                        <button 
+                          type="button" 
+                          onClick={() => setShowCredentialsForm(true)} 
+                          style={{ background: 'none', border: 'none', color: 'var(--gold)', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline', padding: 0, alignSelf: 'flex-start', marginTop: '4px' }}
+                        >
+                          Use Custom Google OAuth Credentials instead
+                        </button>
                       )}
                     </div>
-                  </form>
+                  )}
+
+                  {(!googleStatus.envConfigured || showCredentialsForm) && (
+                    <>
+                      <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--line)', padding: '14px', borderRadius: '8px', fontSize: '12px', color: 'var(--mist)', lineHeight: '1.6', marginBottom: '20px' }}>
+                        <strong style={{ color: 'var(--gold)', display: 'block', marginBottom: '6px' }}>Instruction Details:</strong>
+                        Go to the <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold)', textDecoration: 'underline' }}>Google Cloud Console</a>, create a project, enable the <strong>Google Forms API</strong>, and create an OAuth 2.0 Client ID. 
+                        <br />
+                        Add this callback URL to your <strong>Authorized Redirect URIs</strong>:
+                        <div style={{ margin: '8px 0', padding: '6px 10px', background: 'rgba(7,8,10,0.4)', border: '1px solid var(--line)', borderRadius: '6px', fontFamily: 'monospace', fontSize: '11px', color: 'var(--cream)', wordBreak: 'break-all' }}>
+                          {window.location.origin}/api/auth/google/callback
+                        </div>
+                      </div>
+
+                      <form onSubmit={saveGoogleCredentials} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Google Client ID</label>
+                          <input
+                            type="text"
+                            className="finder-input"
+                            required={!googleStatus.envConfigured}
+                            placeholder="Paste Client ID here..."
+                            value={googleClientConfig.client_id}
+                            onChange={e => setGoogleClientConfig({ ...googleClientConfig, client_id: e.target.value })}
+                            style={{ padding: '9px 12px', fontSize: '12px' }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Google Client Secret</label>
+                          <input
+                            type="password"
+                            className="finder-input"
+                            required={!googleStatus.envConfigured}
+                            placeholder="Paste Client Secret here..."
+                            value={googleClientConfig.client_secret}
+                            onChange={e => setGoogleClientConfig({ ...googleClientConfig, client_secret: e.target.value })}
+                            style={{ padding: '9px 12px', fontSize: '12px' }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Redirect URI</label>
+                          <input
+                            type="text"
+                            className="finder-input"
+                            required={!googleStatus.envConfigured}
+                            placeholder="e.g. http://localhost:5000/api/auth/google/callback"
+                            value={googleClientConfig.redirect_uri || `${window.location.origin}/api/auth/google/callback`}
+                            onChange={e => setGoogleClientConfig({ ...googleClientConfig, redirect_uri: e.target.value })}
+                            style={{ padding: '9px 12px', fontSize: '12px' }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '6px', flexWrap: 'wrap' }}>
+                          <button type="submit" style={{ padding: '10px 20px', fontSize: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--cream)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>
+                            Save Credentials
+                          </button>
+                          {googleStatus.envConfigured && (
+                            <button 
+                              type="button" 
+                              onClick={() => setShowCredentialsForm(false)} 
+                              style={{ background: 'none', border: 'none', color: 'var(--fog)', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                            >
+                              Hide custom credentials setup
+                            </button>
+                          )}
+                          {googleConfigMessage && (
+                            <span style={{ fontSize: '11px', color: googleConfigMessage.includes('success') ? '#4ade80' : 'var(--gold)' }}>
+                              {googleConfigMessage}
+                            </span>
+                          )}
+                        </div>
+                      </form>
+                    </>
+                  )}
 
                   {/* OAuth status panel */}
                   <div style={{ borderTop: '1px solid var(--line)', marginTop: '24px', paddingTop: '20px' }}>

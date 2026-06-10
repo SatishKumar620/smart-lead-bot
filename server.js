@@ -2278,21 +2278,53 @@ app.delete('/api/ingest-templates/:id', async (req, res) => {
 
 // ═══ GOOGLE OAUTH & FORMS API INTEGRATION ═══
 
+// Helper: Resolve Google credentials from DB or Environment Variables
+async function getGoogleCredentials(req) {
+  try {
+    const result = await pool.query("SELECT client_id, client_secret, redirect_uri FROM google_settings WHERE id = 'global'");
+    if (result.rows.length > 0 && result.rows[0].client_id) {
+      return {
+        client_id: result.rows[0].client_id.trim(),
+        client_secret: result.rows[0].client_secret.trim(),
+        redirect_uri: result.rows[0].redirect_uri.trim()
+      };
+    }
+  } catch (err) {
+    console.warn('Failed to query google_settings:', err.message);
+  }
+  
+  const client_id = (process.env.GOOGLE_CLIENT_ID || '').trim();
+  const client_secret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
+  let redirect_uri = (process.env.GOOGLE_REDIRECT_URI || '').trim();
+  
+  if (req && !redirect_uri) {
+    const host = req.headers.host || (typeof req.get === 'function' ? req.get('host') : '') || 'localhost:7860';
+    const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+    redirect_uri = `${protocol}://${host}/api/auth/google/callback`;
+  }
+  
+  return { client_id, client_secret, redirect_uri };
+}
+
 // Get Google Integration Connection Status
 app.get('/api/google/status', async (req, res) => {
   try {
     const result = await pool.query("SELECT client_id, email, access_token, refresh_token FROM google_settings WHERE id = 'global'");
-    if (result.rows.length === 0) {
-      return res.json({ connected: false, configured: false });
-    }
-    const row = result.rows[0];
-    const configured = !!row.client_id;
-    const connected = !!row.access_token;
+    const creds = await getGoogleCredentials(req);
+    const configured = !!creds.client_id;
+    const connected = result.rows.length > 0 && !!result.rows[0].access_token;
+    const email = result.rows.length > 0 ? result.rows[0].email : null;
+    const client_id = creds.client_id ? `${creds.client_id.substring(0, 8)}...` : null;
+    
+    // Check if the credentials came from the environment instead of database settings
+    const isEnv = result.rows.length === 0 || !result.rows[0].client_id;
+    
     res.json({
       connected,
       configured,
-      email: row.email || null,
-      client_id: row.client_id ? `${row.client_id.substring(0, 8)}...` : null
+      envConfigured: isEnv && configured,
+      email,
+      client_id
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2323,11 +2355,10 @@ app.post('/api/google/save-credentials', async (req, res) => {
 // Generate Consent Screen Auth URL
 app.get('/api/google/auth-url', async (req, res) => {
   try {
-    const result = await pool.query("SELECT client_id, redirect_uri FROM google_settings WHERE id = 'global'");
-    if (result.rows.length === 0 || !result.rows[0].client_id) {
+    const { client_id, redirect_uri } = await getGoogleCredentials(req);
+    if (!client_id || !redirect_uri) {
       return res.status(400).json({ error: 'Google Client Credentials are not configured.' });
     }
-    const { client_id, redirect_uri } = result.rows[0];
     const scopes = [
       'https://www.googleapis.com/auth/forms.body',
       'https://www.googleapis.com/auth/forms.responses.readonly',
@@ -2357,13 +2388,10 @@ app.get('/api/auth/google/callback', async (req, res) => {
   }
   
   try {
-    // Read global credentials
-    const credentials = await pool.query("SELECT client_id, client_secret, redirect_uri FROM google_settings WHERE id = 'global'");
-    if (credentials.rows.length === 0) {
-      return res.status(400).send('OAuth Error: Credentials not found in settings');
+    const { client_id, client_secret, redirect_uri } = await getGoogleCredentials(req);
+    if (!client_id || !client_secret || !redirect_uri) {
+      return res.status(400).send('OAuth Error: Credentials not configured');
     }
-    
-    const { client_id, client_secret, redirect_uri } = credentials.rows[0];
     
     // Exchange code for tokens
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -2398,15 +2426,16 @@ app.get('/api/auth/google/callback', async (req, res) => {
       email = profile.email;
     }
     
-    // Save tokens in database
+    // Save tokens in database (upserting 'global' so we save the used client_id and secret)
     await pool.query(`
-      UPDATE google_settings SET
-        access_token = $1,
-        refresh_token = COALESCE($2, refresh_token),
-        token_expiry = $3,
-        email = COALESCE($4, email)
-      WHERE id = 'global'
-    `, [access_token, refresh_token || null, tokenExpiry, email]);
+      INSERT INTO google_settings (id, client_id, client_secret, redirect_uri, access_token, refresh_token, token_expiry, email)
+      VALUES ('global', $1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (id) DO UPDATE SET
+        access_token = EXCLUDED.access_token,
+        refresh_token = COALESCE(EXCLUDED.refresh_token, google_settings.refresh_token),
+        token_expiry = EXCLUDED.token_expiry,
+        email = COALESCE(EXCLUDED.email, google_settings.email)
+    `, [client_id, client_secret, redirect_uri, access_token, refresh_token || null, tokenExpiry, email]);
     
     // Redirect to dashboard page
     res.send(`
@@ -2439,12 +2468,12 @@ app.get('/api/auth/google/callback', async (req, res) => {
 
 // Helper: Get fresh access token using refresh token if expired
 async function getFreshGoogleToken() {
-  const result = await pool.query("SELECT * FROM google_settings WHERE id = 'global'");
+  const result = await pool.query("SELECT access_token, refresh_token, token_expiry FROM google_settings WHERE id = 'global'");
   if (result.rows.length === 0 || !result.rows[0].access_token) {
     throw new Error('Google integration not connected');
   }
   const row = result.rows[0];
-  const { client_id, client_secret, access_token, refresh_token, token_expiry } = row;
+  const { access_token, refresh_token, token_expiry } = row;
   
   if (token_expiry && new Date(token_expiry) > new Date(Date.now() + 60000)) {
     return access_token;
@@ -2452,6 +2481,11 @@ async function getFreshGoogleToken() {
   
   if (!refresh_token) {
     throw new Error('Google access token expired and no refresh token available. Reconnect your account.');
+  }
+  
+  const { client_id, client_secret } = await getGoogleCredentials(null);
+  if (!client_id || !client_secret) {
+    throw new Error('Google Client Credentials are not configured.');
   }
   
   // Refresh token
@@ -2485,6 +2519,7 @@ async function getFreshGoogleToken() {
   
   return nextAccessToken;
 }
+
 
 // Create a new Google Form
 app.post('/api/google-forms/create', async (req, res) => {
