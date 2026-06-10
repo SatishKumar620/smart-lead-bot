@@ -458,6 +458,7 @@ const sendTelegramAlert = async (userId, text) => {
   } catch (err) {
     console.error('Failed to send Telegram alert:', err.message);
   }
+};
 
 // GET /api/notifications — fetch current user's notifications (last 60)
 app.get('/api/notifications', async (req, res) => {
