@@ -20,6 +20,7 @@
   flex-direction: column;
   justify-content: space-between;
   height: 100%;
+  min-height: 0;
 }
 
 .db-logo-wrap {
@@ -50,6 +51,25 @@
   flex-direction: column;
   gap: 12px;
   flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.db-nav::-webkit-scrollbar {
+  width: 4px;
+}
+
+.db-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.db-nav::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 2px;
+}
+
+.db-nav::-webkit-scrollbar-thumb:hover {
+  background: var(--gold-dim);
 }
 
 .db-nav-item {
@@ -67,6 +87,9 @@
   background: transparent;
   cursor: none;
   border-radius: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .db-nav-item.active,
@@ -1053,6 +1076,12 @@
     align-items: center !important;
     margin: 0 !important;
     padding: 0 !important;
+    overflow-y: auto !important;
+    min-height: 0 !important;
+    scrollbar-width: none !important;
+  }
+  .db-nav::-webkit-scrollbar {
+    display: none !important;
   }
   .db-nav-item {
     width: 48px !important;
@@ -2844,6 +2873,22 @@ body:has(.db-map-wrapper:hover) #cr {
   overflow: hidden;
   text-overflow: ellipsis;
   margin-top: 2px;
+}
+
+@media (max-height: 720px) {
+  .db-logo-wrap {
+    margin-bottom: 20px !important;
+  }
+  .db-nav {
+    gap: 8px !important;
+  }
+  .db-nav-item {
+    padding: 10px 14px !important;
+    font-size: 11px !important;
+  }
+  .db-sidebar {
+    padding: 20px 16px !important;
+  }
 }
 
 
