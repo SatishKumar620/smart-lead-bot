@@ -1081,6 +1081,15 @@ app.post('/api/send-emails', async (req, res) => {
         console.error('Failed to log sent email to database:', dbErr.message);
       }
     }
+    if (senderId) {
+      await createNotification(
+        senderId,
+        'email_sent',
+        'Email Sent',
+        `Successfully sent email to ${recipients.length === 1 ? recipients[0].email : `${recipients.length} recipients`}. Subject: "${subject}".`,
+        'bot'
+      );
+    }
     res.json({ message: 'Done', results });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1288,6 +1297,16 @@ app.put('/api/leads', async (req, res) => {
         `, vParams);
       }
       
+      if (req.user && req.user.id && status !== undefined) {
+        await createNotification(
+          req.user.id,
+          'lead_updated',
+          'Bulk Status Updated',
+          `Successfully updated status of ${leadIds.length} leads to "${status}".`,
+          'manage'
+        );
+      }
+      
       return res.json({ message: `Successfully updated ${leadIds.length} leads in bulk` });
     }
     
@@ -1296,15 +1315,33 @@ app.put('/api/leads', async (req, res) => {
       return res.status(400).json({ error: 'Missing leadId' });
     }
     
+    const existingRes = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [leadId]);
+    if (existingRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+    const existing = existingRes.rows[0];
+
+    const finalCompany = company !== undefined ? (company || 'Unknown') : existing.name;
+    const finalWebsite = website !== undefined ? (website || '') : existing.website;
+    const finalPhone = phone !== undefined ? (phone || '') : existing.phone;
+    const finalEmail = email !== undefined ? (email || '') : existing.email;
+    const finalNiche = industry !== undefined ? (industry || 'Other') : existing.niche;
+    const finalCity = location !== undefined ? (location || 'Bangalore') : existing.city;
+    const finalScore = ai_score !== undefined ? parseInt(ai_score || 5) : existing.ai_score;
+    const finalGrade = ai_grade !== undefined ? (ai_grade || 'Warm') : existing.ai_grade;
+    const finalStatus = status !== undefined ? (status || 'New') : existing.status;
+    const finalFollowup = next_followup !== undefined ? (next_followup ? new Date(next_followup) : null) : existing.next_followup;
+    const finalCustomFields = req.body.custom_fields !== undefined ? (req.body.custom_fields || {}) : (existing.custom_fields || {});
+
     await pool.query(`
       UPDATE leads SET 
         name = $1, website = $2, phone = $3, email = $4, niche = $5, city = $6,
         ai_score = $7, ai_grade = $8, status = $9, next_followup = $10, custom_fields = $11
       WHERE lead_id = $12
     `, [
-      company || 'Unknown', website || '', phone || '', email || '', industry || 'Other', location || 'Bangalore',
-      parseInt(ai_score || 5), ai_grade || 'Warm', status || 'New', next_followup ? new Date(next_followup) : null,
-      JSON.stringify(req.body.custom_fields || {}),
+      finalCompany, finalWebsite, finalPhone, finalEmail, finalNiche, finalCity,
+      finalScore, finalGrade, finalStatus, finalFollowup,
+      JSON.stringify(finalCustomFields),
       leadId
     ]);
     
@@ -1314,11 +1351,22 @@ app.put('/api/leads', async (req, res) => {
         ai_score = $6, ai_grade = $7, text_chunk = $8
       WHERE lead_id = $9
     `, [
-      company || 'Unknown', website || '', phone || '', industry || 'Other', location || 'Bangalore',
-      parseInt(ai_score || 5), ai_grade || 'Warm',
-      `Business Name: ${company}. Industry: ${industry}. City: ${location}. Score: ${ai_score}/10. Status: ${status}. Contact Phone: ${phone}. Email: ${email}.`,
+      finalCompany, finalWebsite, finalPhone, finalNiche, finalCity,
+      finalScore, finalGrade,
+      `Business Name: ${finalCompany}. Industry: ${finalNiche}. City: ${finalCity}. Score: ${finalScore}/10. Status: ${finalStatus}. Contact Phone: ${finalPhone}. Email: ${finalEmail}.`,
       leadId
     ]);
+    
+    if (req.user && req.user.id) {
+      await createNotification(
+        req.user.id,
+        'lead_updated',
+        'Lead Updated',
+        `Lead "${company || 'Unknown'}" status updated to "${status || 'New'}".`,
+        'manage',
+        leadId
+      );
+    }
     
     res.json({ message: 'Lead updated successfully' });
   } catch (err) {
@@ -1451,6 +1499,29 @@ app.post('/api/leads', async (req, res) => {
             })
           });
         } catch (n8nErr) { /* ignore */ }
+      }
+    }
+    
+    if (req.user && req.user.id) {
+      if (rawLeads.length === 1) {
+        const firstLead = rawLeads[0];
+        const leadName = firstLead.company || firstLead.name || 'Unknown';
+        await createNotification(
+          req.user.id,
+          'lead_ingest',
+          'Quick Lead Ingested',
+          `Lead "${leadName}" has been successfully added to the database.`,
+          'manage',
+          insertedCount[0]
+        );
+      } else if (rawLeads.length > 1) {
+        await createNotification(
+          req.user.id,
+          'lead_ingest',
+          'Bulk Leads Ingested',
+          `Successfully imported ${insertedCount.length} leads from source.`,
+          'manage'
+        );
       }
     }
     
@@ -2042,6 +2113,15 @@ Do NOT return placeholders like "Business A" or empty fields. Generate realistic
       
       await Promise.all(enrichmentPromises);
       console.log(`Enrichment complete for ${finalLeads.length} leads.`);
+      if (req.user && req.user.id) {
+        await createNotification(
+          req.user.id,
+          'lead_finder',
+          'Lead Discovery Completed',
+          `Successfully processed and imported ${finalLeads.length} leads for niche "${cleanNiche}" in "${cityVal}".`,
+          'overview'
+        );
+      }
     };
     
     // Execute asynchronously to return fast response to UI
@@ -2549,6 +2629,13 @@ app.get('/api/auth/google/callback', async (req, res) => {
     // If state contains a userId, automatically toggle their email_linked status
     if (state) {
       await pool.query('UPDATE users SET email_linked = TRUE WHERE id = $1', [state]);
+      await createNotification(
+        state,
+        'integration',
+        'Google OAuth Connected',
+        'Your Google/Gmail account has been authorized and linked successfully.',
+        'integrations'
+      );
     }
     
     // Redirect to dashboard page
@@ -2796,6 +2883,16 @@ app.post('/api/google-forms/create', async (req, res) => {
       RETURNING *
     `, [formId, title, responderUri]);
     
+    if (req.user && req.user.id) {
+      await createNotification(
+        req.user.id,
+        'google_form_created',
+        'Google Form Deployed',
+        `Google Form "${title}" has been successfully created and linked.`,
+        'integrations'
+      );
+    }
+    
     res.json(dbRes.rows[0]);
   } catch (err) {
     console.error('Google Form Create Error:', err.message);
@@ -3009,6 +3106,49 @@ app.post('/api/telegram/disconnect', async (req, res) => {
   }
 });
 
+app.post('/api/telegram/send-lead', async (req, res) => {
+  try {
+    const { leadId } = req.body;
+    if (!leadId) {
+      return res.status(400).json({ error: 'Missing leadId' });
+    }
+    const leadCheck = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [leadId]);
+    if (leadCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+    const lead = leadCheck.rows[0];
+
+    const alertText = `📤 *LEAD DISPATCHED MANUALLY*\n\n🏢 *${lead.name}*\n📍 City: ${lead.city || 'N/A'}\n💼 Niche: ${lead.niche || 'N/A'}\n📞 Phone: ${lead.phone || 'N/A'}\n📧 Email: ${lead.email || 'N/A'}\n🌐 Website: ${lead.website || 'N/A'}\n⭐ Score: ${lead.ai_score || 'N/A'}/10\n📢 Grade: ${lead.ai_grade || 'N/A'}`;
+    
+    const userRes = await pool.query('SELECT telegram_chat_id, telegram_linked FROM users WHERE id = $1', [req.user.id]);
+    const user = userRes.rows[0];
+    
+    if (user && user.telegram_linked && user.telegram_chat_id) {
+      await sendTelegramAlert(req.user.id, alertText);
+      await createNotification(
+        req.user.id,
+        'telegram_dispatched',
+        'Lead Dispatched to Telegram',
+        `Lead "${lead.name}" details successfully sent to your Telegram bot.`,
+        'manage',
+        leadId
+      );
+      res.json({ message: 'Lead dispatched to Telegram successfully', status: 'sent' });
+    } else {
+      await createNotification(
+        req.user.id,
+        'telegram_dispatched',
+        'Telegram Dispatch Failed',
+        `Failed to send lead "${lead.name}" to Telegram: Bot not linked.`,
+        'integrations'
+      );
+      res.json({ message: 'Telegram account not linked', status: 'not_linked' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/telegram/webhook', async (req, res) => {
   const { message } = req.body;
   if (!message || !message.text || !message.chat) {
@@ -3147,6 +3287,16 @@ app.post('/api/email/connect', async (req, res) => {
         INSERT INTO user_emails (user_id, folder, sender, recipient, subject, body, snippet, is_read, sent_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       `, [req.user.id, email.folder, email.sender, email.recipient, email.subject, email.body, email.snippet, email.is_read, email.sent_at]);
+    }
+
+    if (req.user && req.user.id) {
+      await createNotification(
+        req.user.id,
+        'integration',
+        'Email Connected',
+        'Your business email account has been linked and synchronized successfully.',
+        'integrations'
+      );
     }
 
     res.json({ success: true, message: 'Email account linked and synchronized successfully.' });

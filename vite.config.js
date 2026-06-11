@@ -133,6 +133,18 @@ async function sendTelegramAlert(userId, text) {
   }
 }
 
+// Helper: Create application notification
+async function createNotification(userId, type, title, message, linkTab, linkId) {
+  try {
+    await pool.query(
+      'INSERT INTO notifications (user_id, type, title, message, link_tab, link_id) VALUES ($1,$2,$3,$4,$5,$6)',
+      [userId, type, title, message, linkTab || null, String(linkId || '')]
+    )
+  } catch (err) {
+    console.error('Failed to create notification in dev server:', err.message)
+  }
+}
+
 // Helper: Fetch real email messages from Gmail API
 async function fetchGmailMessages(accessToken, folderName) {
   let labelId = 'INBOX';
@@ -878,6 +890,15 @@ export default defineConfig({
                       console.error('Failed to log sent email to database:', dbErr.message)
                     }
                   }
+                  if (senderId) {
+                    await createNotification(
+                      senderId,
+                      'email_sent',
+                      'Email Sent',
+                      `Successfully sent email to ${recipients.length === 1 ? recipients[0].email : `${recipients.length} recipients`}. Subject: "${subject}".`,
+                      'bot'
+                    );
+                  }
                   res.statusCode = 200
                   res.end(JSON.stringify({ message: 'Done', results }))
                 } catch(err) {
@@ -1020,6 +1041,15 @@ export default defineConfig({
                       `, vParams)
                     }
                     
+                    if (req.user && req.user.id && status !== undefined) {
+                      await createNotification(
+                        req.user.id,
+                        'lead_updated',
+                        'Bulk Status Updated',
+                        `Successfully updated status of ${leadIds.length} leads to "${status}".`,
+                        'manage'
+                      );
+                    }
                     res.statusCode = 200
                     res.end(JSON.stringify({ message: `Successfully updated ${leadIds.length} leads in bulk` }))
                     return
@@ -1032,6 +1062,26 @@ export default defineConfig({
                     return
                   }
                   
+                  const existingRes = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [leadId])
+                  if (existingRes.rows.length === 0) {
+                    res.statusCode = 404
+                    res.end(JSON.stringify({ error: 'Lead not found' }))
+                    return
+                  }
+                  const existing = existingRes.rows[0]
+
+                  const finalCompany = company !== undefined ? (company || 'Unknown') : existing.name
+                  const finalWebsite = website !== undefined ? (website || '') : existing.website
+                  const finalPhone = phone !== undefined ? (phone || '') : existing.phone
+                  const finalEmail = email !== undefined ? (email || '') : existing.email
+                  const finalNiche = industry !== undefined ? (industry || 'Other') : existing.niche
+                  const finalCity = location !== undefined ? (location || 'Bangalore') : existing.city
+                  const finalScore = ai_score !== undefined ? parseInt(ai_score || 5) : existing.ai_score
+                  const finalGrade = ai_grade !== undefined ? (ai_grade || 'Warm') : existing.ai_grade
+                  const finalStatus = status !== undefined ? (status || 'New') : existing.status
+                  const finalFollowup = next_followup !== undefined ? (next_followup ? new Date(next_followup) : null) : existing.next_followup
+                  const finalCustomFields = body.custom_fields !== undefined ? (body.custom_fields || {}) : (existing.custom_fields || {})
+
                   // Update leads table
                   await pool.query(`
                     UPDATE leads SET 
@@ -1048,17 +1098,17 @@ export default defineConfig({
                       custom_fields = $11
                     WHERE lead_id = $12
                   `, [
-                    company || 'Unknown',
-                    website || '',
-                    phone || '',
-                    email || '',
-                    industry || 'Other',
-                    location || 'Bangalore',
-                    parseInt(ai_score || 5),
-                    ai_grade || 'Warm',
-                    status || 'New',
-                    next_followup ? new Date(next_followup) : null,
-                    JSON.stringify(body.custom_fields || {}),
+                    finalCompany,
+                    finalWebsite,
+                    finalPhone,
+                    finalEmail,
+                    finalNiche,
+                    finalCity,
+                    finalScore,
+                    finalGrade,
+                    finalStatus,
+                    finalFollowup,
+                    JSON.stringify(finalCustomFields),
                     leadId
                   ])
                   
@@ -1075,16 +1125,27 @@ export default defineConfig({
                       text_chunk = $8
                     WHERE lead_id = $9
                   `, [
-                    company || 'Unknown',
-                    website || '',
-                    phone || '',
-                    industry || 'Other',
-                    location || 'Bangalore',
-                    parseInt(ai_score || 5),
-                    ai_grade || 'Warm',
-                    `Business Name: ${company}. Industry: ${industry}. City: ${location}. Score: ${ai_score}/10. Status: ${status}. Contact Phone: ${phone}. Email: ${email}.`,
+                    finalCompany,
+                    finalWebsite,
+                    finalPhone,
+                    finalNiche,
+                    finalCity,
+                    finalScore,
+                    finalGrade,
+                    `Business Name: ${finalCompany}. Industry: ${finalNiche}. City: ${finalCity}. Score: ${finalScore}/10. Status: ${finalStatus}. Contact Phone: ${finalPhone}. Email: ${finalEmail}.`,
                     leadId
                   ])
+                  
+                  if (req.user && req.user.id) {
+                    await createNotification(
+                      req.user.id,
+                      'lead_updated',
+                      'Lead Updated',
+                      `Lead "${finalCompany}" status updated to "${finalStatus}".`,
+                      'manage',
+                      leadId
+                    );
+                  }
                   
                   res.statusCode = 200
                   res.end(JSON.stringify({ message: 'Lead updated successfully' }))
@@ -1219,7 +1280,6 @@ export default defineConfig({
                       await sendTelegramAlert(req.user.id, alertText);
                     }
                     
-                    // Trigger Telegram alert webhook in n8n in parallel if single manual ingest lead
                     if (rawLeads.length === 1) {
                       try {
                         const n8nUrl = 'http://localhost:5678/webhook/find-leads'
@@ -1236,6 +1296,29 @@ export default defineConfig({
                       } catch (n8nErr) {
                         console.warn('n8n notification dispatch skipped:', n8nErr.message)
                       }
+                    }
+                  }
+                  
+                  if (req.user && req.user.id) {
+                    if (rawLeads.length === 1) {
+                      const firstLead = rawLeads[0];
+                      const leadName = firstLead.company || firstLead.name || 'Unknown';
+                      await createNotification(
+                        req.user.id,
+                        'lead_ingest',
+                        'Quick Lead Ingested',
+                        `Lead "${leadName}" has been successfully added to the database.`,
+                        'manage',
+                        insertedCount[0]
+                      );
+                    } else if (rawLeads.length > 1) {
+                      await createNotification(
+                        req.user.id,
+                        'lead_ingest',
+                        'Bulk Leads Ingested',
+                        `Successfully imported ${insertedCount.length} leads from source.`,
+                        'manage'
+                      );
                     }
                   }
                   
@@ -1682,6 +1765,15 @@ export default defineConfig({
                       
                       await Promise.all(enrichmentPromises);
                       console.log(`[Vite Dev] Direct lead search & enrichment completed.`);
+                      if (req.user && req.user.id) {
+                        await createNotification(
+                          req.user.id,
+                          'lead_finder',
+                          'Lead Discovery Completed',
+                          `Successfully processed and imported ${finalLeads.length} leads for niche "${cleanNiche}" in "${cityVal}".`,
+                          'overview'
+                        );
+                      }
                     };
                     
                     processLeadsAsyncVite();
@@ -2143,6 +2235,13 @@ ${JSON.stringify(leadsData)}`
               // If state contains a userId, automatically toggle their email_linked status
               if (state) {
                 await pool.query('UPDATE users SET email_linked = TRUE WHERE id = $1', [state])
+                await createNotification(
+                  state,
+                  'integration',
+                  'Google OAuth Connected',
+                  'Your Google/Gmail account has been authorized and linked successfully.',
+                  'integrations'
+                );
               }
               
               res.setHeader('Content-Type', 'text/html')
@@ -2271,6 +2370,16 @@ ${JSON.stringify(leadsData)}`
                   VALUES ($1, $2, $3)
                   RETURNING *
                 `, [formId, title, responderUri])
+                
+                if (req.user && req.user.id) {
+                  await createNotification(
+                    req.user.id,
+                    'google_form_created',
+                    'Google Form Deployed',
+                    `Google Form "${title}" has been successfully created and linked.`,
+                    'integrations'
+                  );
+                }
                 
                 res.statusCode = 200
                 res.end(JSON.stringify(dbRes.rows[0]))
@@ -2505,6 +2614,63 @@ ${JSON.stringify(leadsData)}`
             return
           }
 
+          if (req.url && req.url.startsWith('/api/telegram/send-lead') && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let bodyStr = ''
+            req.on('data', chunk => { bodyStr += chunk })
+            req.on('end', async () => {
+              try {
+                const body = JSON.parse(bodyStr)
+                const { leadId } = body
+                if (!leadId) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ error: 'Missing leadId' }))
+                  return
+                }
+                const leadCheck = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [leadId])
+                if (leadCheck.rows.length === 0) {
+                  res.statusCode = 404
+                  res.end(JSON.stringify({ error: 'Lead not found' }))
+                  return
+                }
+                const lead = leadCheck.rows[0]
+
+                const alertText = `📤 *LEAD DISPATCHED MANUALLY*\n\n🏢 *${lead.name}*\n📍 City: ${lead.city || 'N/A'}\n💼 Niche: ${lead.niche || 'N/A'}\n📞 Phone: ${lead.phone || 'N/A'}\n📧 Email: ${lead.email || 'N/A'}\n🌐 Website: ${lead.website || 'N/A'}\n⭐ Score: ${lead.ai_score || 'N/A'}/10\n📢 Grade: ${lead.ai_grade || 'N/A'}`
+                
+                const userRes = await pool.query('SELECT telegram_chat_id, telegram_linked FROM users WHERE id = $1', [req.user.id])
+                const user = userRes.rows[0]
+                
+                if (user && user.telegram_linked && user.telegram_chat_id) {
+                  await sendTelegramAlert(req.user.id, alertText)
+                  await createNotification(
+                    req.user.id,
+                    'telegram_dispatched',
+                    'Lead Dispatched to Telegram',
+                    `Lead "${lead.name}" details successfully sent to your Telegram bot.`,
+                    'manage',
+                    leadId
+                  )
+                  res.statusCode = 200
+                  res.end(JSON.stringify({ message: 'Lead dispatched to Telegram successfully', status: 'sent' }))
+                } else {
+                  await createNotification(
+                    req.user.id,
+                    'telegram_dispatched',
+                    'Telegram Dispatch Failed',
+                    `Failed to send lead "${lead.name}" to Telegram: Bot not linked.`,
+                    'integrations'
+                  )
+                  res.statusCode = 200
+                  res.end(JSON.stringify({ message: 'Telegram account not linked', status: 'not_linked' }))
+                }
+              } catch (err) {
+                res.statusCode = 500
+                res.end(JSON.stringify({ error: err.message }))
+              }
+            })
+            return
+          }
+
           if (req.url && req.url.startsWith('/api/telegram/webhook') && req.method === 'POST') {
             res.setHeader('Content-Type', 'application/json')
             let bodyStr = ''
@@ -2661,6 +2827,16 @@ ${JSON.stringify(leadsData)}`
                   INSERT INTO user_emails (user_id, folder, sender, recipient, subject, body, snippet, is_read, sent_at)
                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 `, [req.user.id, email.folder, email.sender, email.recipient, email.subject, email.body, email.snippet, email.is_read, email.sent_at])
+              }
+
+              if (req.user && req.user.id) {
+                await createNotification(
+                  req.user.id,
+                  'integration',
+                  'Email Connected',
+                  'Your business email account has been linked and synchronized successfully.',
+                  'integrations'
+                );
               }
 
               res.statusCode = 200

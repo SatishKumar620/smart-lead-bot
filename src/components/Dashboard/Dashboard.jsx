@@ -481,6 +481,7 @@ const Dashboard = () => {
         fetchEmailStatus();
         setEmailFolder('inbox');
         setSelectedOutboxEmail(null);
+        fetchNotifications();
       }
     } catch (e) { console.error(e); }
   };
@@ -573,6 +574,7 @@ const Dashboard = () => {
         setFormCreateStatus('Form created successfully!');
         setNewFormTitle('');
         fetchGoogleForms();
+        fetchNotifications();
         setTimeout(() => setFormCreateStatus(''), 3000);
       } else {
         const err = await res.json();
@@ -781,6 +783,7 @@ const Dashboard = () => {
 
       // Refresh outbox history in the frontend state
       fetchOutboxHistory();
+      fetchNotifications();
 
     } catch (err) {
       console.error('Failed to send outreach:', err);
@@ -986,17 +989,40 @@ const Dashboard = () => {
     }
   }, [filteredLeads]);
 
-  // Manage lead statuses locally
-  const toggleLeadStatus = (leadId) => {
-    setLeads(prevLeads => prevLeads.map(lead => {
-      if (lead.leadId === leadId) {
-        const statuses = ['New', 'Contacted', 'In Progress', 'Closed'];
-        const currentIdx = statuses.indexOf(lead.status);
-        const nextStatus = statuses[(currentIdx + 1) % statuses.length];
-        return { ...lead, status: nextStatus };
+  // Manage lead statuses locally and persist to database
+  const toggleLeadStatus = async (leadId) => {
+    const lead = leads.find(l => l.leadId === leadId);
+    if (!lead) return;
+
+    const statuses = ['New', 'Contacted', 'In Progress', 'Closed'];
+    const currentIdx = statuses.indexOf(lead.status);
+    const nextStatus = statuses[(currentIdx + 1) % statuses.length];
+
+    // Optimistic UI update
+    setLeads(prevLeads => prevLeads.map(l => {
+      if (l.leadId === leadId) {
+        return { ...l, status: nextStatus };
       }
-      return lead;
+      return l;
     }));
+
+    try {
+      const resp = await authenticatedFetch('/api/leads', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId, status: nextStatus })
+      });
+      if (resp.ok) {
+        fetchLeads();
+        fetchNotifications();
+      } else {
+        console.error("Failed to persist cycled lead status");
+        fetchLeads();
+      }
+    } catch (err) {
+      console.error("Error cycling lead status:", err);
+      fetchLeads();
+    }
   };
 
   const handleLeadEditInit = (lead) => {
@@ -1032,6 +1058,7 @@ const Dashboard = () => {
           const dbData = await dbResp.json();
           setLeads(dbData);
         }
+        fetchNotifications();
       } else {
         console.error("Failed to save lead edits");
       }
@@ -1053,6 +1080,7 @@ const Dashboard = () => {
         if (activeLeadTimeline && activeLeadTimeline.leadId === leadId) {
           fetchLeadActivities(leadId);
         }
+        fetchNotifications();
       } else {
         console.error("Failed to assign lead");
       }
@@ -1146,6 +1174,7 @@ const Dashboard = () => {
         setNewMilestoneText('');
         setIsTaskFormOpen(false);
         fetchTasksList();
+        fetchNotifications();
       } else {
         const errData = await resp.json();
         console.error("Failed to create task:", errData);
@@ -1263,6 +1292,7 @@ const Dashboard = () => {
             const dbData = await dbResp.json();
             setLeads(dbData);
           }
+          fetchNotifications();
         } else {
           const errJson = await postResp.json();
           throw new Error(errJson.error || "Failed to upload leads to database");
@@ -1356,9 +1386,31 @@ const Dashboard = () => {
   };
 
   // Resend Telegram pings
-  const triggerTelegramNotify = (leadId) => {
+  const triggerTelegramNotify = async (leadId) => {
     const lead = leads.find(l => l.leadId === leadId);
-    alert(`DISPATCHED: Telegram alert sent successfully to AE for ${lead.company} (Score: ${lead.ai_score}/10)`);
+    if (!lead) return;
+    try {
+      const resp = await authenticatedFetch('/api/telegram/send-lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.status === 'sent') {
+          alert(`DISPATCHED: Telegram alert sent successfully to AE for ${lead.company} (Score: ${lead.ai_score}/10)`);
+        } else {
+          alert(`Failed to send Telegram alert: ${data.message || 'Telegram bot not linked.'}`);
+        }
+        fetchNotifications();
+      } else {
+        const errorData = await resp.json();
+        alert(`Failed to send Telegram alert: ${errorData.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error("Error sending Telegram alert:", err);
+      alert(`Error sending Telegram alert: ${err.message}`);
+    }
   };
 
   // Fetch from the backend report export endpoint and trigger a browser download
@@ -2957,6 +3009,7 @@ const Dashboard = () => {
                   const data = await dbResp.json();
                   setLeads(data);
                 }
+                fetchNotifications();
               } else {
                 const errData = await res.json().catch(() => ({}));
                 setQuickIngestStatus(errData.error || 'Ingest failed. Check server logs.');
@@ -4387,6 +4440,7 @@ const Dashboard = () => {
               if (resp.ok) {
                 resetTaskForm();
                 fetchTasksList();
+                fetchNotifications();
               } else {
                 const err = await resp.json();
                 alert(err.error || 'Failed to create task');
