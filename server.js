@@ -3106,6 +3106,32 @@ app.post('/api/telegram/disconnect', async (req, res) => {
   }
 });
 
+app.post('/api/telegram/link-manual', async (req, res) => {
+  try {
+    const { chatId } = req.body;
+    if (!chatId) {
+      return res.status(400).json({ error: 'Missing chatId' });
+    }
+    await pool.query('UPDATE users SET telegram_chat_id = $1, telegram_linked = TRUE WHERE id = $2', [chatId, req.user.id]);
+    await createNotification(
+      req.user.id,
+      'integration',
+      'Telegram Linked Manually',
+      `Your Telegram account has been linked manually to Chat ID: ${chatId}.`,
+      'integrations'
+    );
+    try {
+      const botText = `✅ *Lead.ai Connection Active*\n\nYour CRM account is now successfully linked to this Telegram chat. You will receive real-time notifications here!`;
+      await sendTelegramAlert(req.user.id, botText);
+    } catch (e) {
+      console.warn('[TELEGRAM MANUAL LINK] Failed to send hello ping:', e.message);
+    }
+    res.json({ success: true, message: 'Telegram account linked manually.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/telegram/send-lead', async (req, res) => {
   try {
     const { leadId } = req.body;

@@ -335,6 +335,7 @@ const Dashboard = () => {
   
   // Telegram & Email Sync States
   const [telegramStatus, setTelegramStatus] = useState({ linked: false, botUsername: '', linkUrl: '' });
+  const [manualTelegramChatId, setManualTelegramChatId] = useState('');
   const [emailStatus, setEmailStatus] = useState({ linked: false, email: '' });
   const [emailFolder, setEmailFolder] = useState('inbox'); // inbox, draft, outbox, copilot, spam
 
@@ -464,6 +465,32 @@ const Dashboard = () => {
       const res = await authenticatedFetch('/api/telegram/disconnect', { method: 'POST' });
       if (res.ok) fetchTelegramStatus();
     } catch (e) { console.error(e); }
+  };
+
+  const handleManualTelegramLink = async () => {
+    if (!manualTelegramChatId.trim()) {
+      alert("Please enter a valid Telegram Chat ID.");
+      return;
+    }
+    try {
+      const res = await authenticatedFetch('/api/telegram/link-manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId: manualTelegramChatId.trim() })
+      });
+      if (res.ok) {
+        alert("Telegram account linked manually successfully!");
+        setManualTelegramChatId('');
+        fetchTelegramStatus();
+        fetchNotifications();
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to link Telegram account.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Network error. Please try again.");
+    }
   };
 
   const handleConnectEmail = async () => {
@@ -4218,14 +4245,38 @@ const Dashboard = () => {
                     </div>
                     <div>
                       {!telegramStatus.linked ? (
-                        <button
-                          onClick={handleConnectTelegram}
-                          className="nlp-submit-btn"
-                          style={{ width: '100%', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
-                          Connect Telegram Account ↗
-                        </button>
+                        <>
+                          <button
+                            onClick={handleConnectTelegram}
+                            className="nlp-submit-btn"
+                            style={{ width: '100%', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
+                            Connect Telegram Account ↗
+                          </button>
+                          <div style={{ marginTop: '16px', borderTop: '1px dashed var(--line)', paddingTop: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                              <span style={{ fontSize: '11px', color: 'var(--fog)' }}>Or link manually with Chat ID:</span>
+                              <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: 'var(--gold)', textDecoration: 'underline' }}>Get Chat ID ↗</a>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <input
+                                type="text"
+                                className="finder-input"
+                                placeholder="e.g. 543216789"
+                                value={manualTelegramChatId}
+                                onChange={e => setManualTelegramChatId(e.target.value)}
+                                style={{ flex: 1, padding: '8px 12px', fontSize: '12px' }}
+                              />
+                              <button
+                                onClick={handleManualTelegramLink}
+                                style={{ padding: '8px 16px', fontSize: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--cream)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+                              >
+                                Link
+                              </button>
+                            </div>
+                          </div>
+                        </>
                       ) : (
                         <button
                           onClick={handleDisconnectTelegram}

@@ -2614,6 +2614,43 @@ ${JSON.stringify(leadsData)}`
             return
           }
 
+          if (req.url && req.url.startsWith('/api/telegram/link-manual') && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let bodyStr = ''
+            req.on('data', chunk => { bodyStr += chunk })
+            req.on('end', async () => {
+              try {
+                const body = JSON.parse(bodyStr)
+                const { chatId } = body
+                if (!chatId) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ error: 'Missing chatId' }))
+                  return
+                }
+                await pool.query('UPDATE users SET telegram_chat_id = $1, telegram_linked = TRUE WHERE id = $2', [chatId, req.user.id])
+                await createNotification(
+                  req.user.id,
+                  'integration',
+                  'Telegram Linked Manually',
+                  `Your Telegram account has been linked manually to Chat ID: ${chatId}.`,
+                  'integrations'
+                )
+                try {
+                  const botText = `✅ *Lead.ai Connection Active*\n\nYour CRM account is now successfully linked to this Telegram chat. You will receive real-time notifications here!`
+                  await sendTelegramAlert(req.user.id, botText)
+                } catch (e) {
+                  console.warn('[TELEGRAM MANUAL LINK] Failed to send hello ping:', e.message)
+                }
+                res.statusCode = 200
+                res.end(JSON.stringify({ success: true, message: 'Telegram account linked manually.' }))
+              } catch (err) {
+                res.statusCode = 500
+                res.end(JSON.stringify({ error: err.message }))
+              }
+            })
+            return
+          }
+
           if (req.url && req.url.startsWith('/api/telegram/send-lead') && req.method === 'POST') {
             res.setHeader('Content-Type', 'application/json')
             let bodyStr = ''
