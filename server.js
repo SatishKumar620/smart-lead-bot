@@ -430,6 +430,12 @@ const createNotification = async (userId, type, title, message, linkTab, linkId)
   }
 };
 
+// Helper: Escape Markdown characters to prevent Telegram parse errors
+const escapeMarkdown = (text) => {
+  if (!text) return '';
+  return String(text).replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+};
+
 // Helper: Send alert to linked Telegram user bot
 const sendTelegramAlert = async (userId, text) => {
   try {
@@ -449,7 +455,7 @@ const sendTelegramAlert = async (userId, text) => {
       body: JSON.stringify({
         chat_id: user.telegram_chat_id,
         text: text,
-        parse_mode: 'Markdown'
+        parse_mode: 'MarkdownV2'
       })
     });
     if (!res.ok) {
@@ -1380,8 +1386,20 @@ app.delete('/api/leads', async (req, res) => {
     if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
       return res.status(400).json({ error: 'Missing or empty leadIds array' });
     }
-    await pool.query('DELETE FROM leads WHERE lead_id = ANY($1)', [leadIds]);
+    
+    // Explicit cascading delete for related tables to prevent foreign key errors and orphaned entries
+    const taskIdsRes = await pool.query('SELECT id FROM tasks WHERE lead_id = ANY($1)', [leadIds]);
+    const taskIds = taskIdsRes.rows.map(r => r.id);
+    if (taskIds.length > 0) {
+      await pool.query('DELETE FROM task_assignments WHERE task_id = ANY($1)', [taskIds]);
+      await pool.query('DELETE FROM task_milestones WHERE task_id = ANY($1)', [taskIds]);
+      await pool.query('DELETE FROM task_comments WHERE task_id = ANY($1)', [taskIds]);
+      await pool.query('DELETE FROM tasks WHERE id = ANY($1)', [taskIds]);
+    }
+    await pool.query('DELETE FROM lead_activities WHERE lead_id = ANY($1)', [leadIds]);
     await pool.query('DELETE FROM lead_vectors WHERE lead_id = ANY($1)', [leadIds]);
+    await pool.query('DELETE FROM leads WHERE lead_id = ANY($1)', [leadIds]);
+    
     res.json({ message: `Successfully deleted ${leadIds.length} leads` });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1480,7 +1498,7 @@ app.post('/api/leads', async (req, res) => {
       insertedCount.push(leadId);
       
       if (grade === 'Hot' || grade === 'Warm') {
-        const alertText = `🔥 *${grade.toUpperCase()} LEAD INGESTED*\n\n🏢 *${name}*\n📍 City: ${city || 'N/A'}\n💼 Niche: ${niche || 'N/A'}\n📞 Phone: ${phone || 'N/A'}\n📧 Email: ${email || 'N/A'}\n🌐 Website: ${website || 'N/A'}\n⭐ Score: ${score || 'N/A'}/10\n📢 Source: ${source}`;
+        const alertText = `🔥 *${escapeMarkdown(grade.toUpperCase())} LEAD INGESTED*\n\n🏢 *${escapeMarkdown(name)}*\n📍 City: ${escapeMarkdown(city || 'N/A')}\n💼 Niche: ${escapeMarkdown(niche || 'N/A')}\n📞 Phone: ${escapeMarkdown(phone || 'N/A')}\n📧 Email: ${escapeMarkdown(email || 'N/A')}\n🌐 Website: ${escapeMarkdown(website || 'N/A')}\n⭐ Score: ${score || 'N/A'}/10\n📢 Source: ${escapeMarkdown(source)}`;
         await sendTelegramAlert(req.user.id, alertText);
       }
       
@@ -2103,7 +2121,7 @@ Do NOT return placeholders like "Business A" or empty fields. Generate realistic
             `Business Name: ${item.name}. Industry: ${cleanNiche}. City: ${cityVal}. Score: ${score}/10. Grade: ${grade}. Contact: ${bestPhone || 'N/A'}. Email: ${bestEmail || 'N/A'}. Website: ${item.website || 'N/A'}. Recommended: ${recommendedService}.`
           ]);
           if (grade === 'Hot' || grade === 'Warm') {
-            const alertText = `🔥 *${grade.toUpperCase()} LEAD DISCOVERED*\n\n🏢 *${item.name}*\n📍 City: ${cityVal}\n💼 Niche: ${cleanNiche}\n📞 Phone: ${bestPhone || 'N/A'}\n📧 Email: ${bestEmail || 'N/A'}\n🌐 Website: ${item.website || 'N/A'}\n⭐ Score: ${score}/10\n📢 Source: Direct Search`;
+            const alertText = `🔥 *${escapeMarkdown(grade.toUpperCase())} LEAD DISCOVERED*\n\n🏢 *${escapeMarkdown(item.name)}*\n📍 City: ${escapeMarkdown(cityVal)}\n💼 Niche: ${escapeMarkdown(cleanNiche)}\n📞 Phone: ${escapeMarkdown(bestPhone || 'N/A')}\n📧 Email: ${escapeMarkdown(bestEmail || 'N/A')}\n🌐 Website: ${escapeMarkdown(item.website || 'N/A')}\n⭐ Score: ${score}/10\n📢 Source: Direct Search`;
             await sendTelegramAlert(req.user.id, alertText);
           }
         } catch (dbErr) {
@@ -2534,6 +2552,16 @@ app.post('/api/google/save-credentials', async (req, res) => {
         redirect_uri = EXCLUDED.redirect_uri
     `, [client_id.trim(), client_secret.trim(), redirect_uri.trim()]);
     res.json({ message: 'Google Client credentials saved successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Disconnect / Clear Google tokens
+app.post('/api/google/disconnect', async (req, res) => {
+  try {
+    await pool.query("UPDATE google_settings SET access_token = NULL, refresh_token = NULL, token_expiry = NULL, email = NULL WHERE id = 'global'");
+    res.json({ success: true, message: 'Google account disconnected successfully.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -3144,7 +3172,7 @@ app.post('/api/telegram/send-lead', async (req, res) => {
     }
     const lead = leadCheck.rows[0];
 
-    const alertText = `📤 *LEAD DISPATCHED MANUALLY*\n\n🏢 *${lead.name}*\n📍 City: ${lead.city || 'N/A'}\n💼 Niche: ${lead.niche || 'N/A'}\n📞 Phone: ${lead.phone || 'N/A'}\n📧 Email: ${lead.email || 'N/A'}\n🌐 Website: ${lead.website || 'N/A'}\n⭐ Score: ${lead.ai_score || 'N/A'}/10\n📢 Grade: ${lead.ai_grade || 'N/A'}`;
+    const alertText = `📤 *LEAD DISPATCHED MANUALLY*\n\n🏢 *${escapeMarkdown(lead.name)}*\n📍 City: ${escapeMarkdown(lead.city || 'N/A')}\n💼 Niche: ${escapeMarkdown(lead.niche || 'N/A')}\n📞 Phone: ${escapeMarkdown(lead.phone || 'N/A')}\n📧 Email: ${escapeMarkdown(lead.email || 'N/A')}\n🌐 Website: ${escapeMarkdown(lead.website || 'N/A')}\n⭐ Score: ${lead.ai_score || 'N/A'}/10\n📢 Grade: ${escapeMarkdown(lead.ai_grade || 'N/A')}`;
     
     const userRes = await pool.query('SELECT telegram_chat_id, telegram_linked FROM users WHERE id = $1', [req.user.id]);
     const user = userRes.rows[0];

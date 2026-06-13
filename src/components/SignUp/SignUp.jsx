@@ -377,7 +377,7 @@ const SignUp = () => {
                   }}
                 >
                   <option value="user">User (Assigned Tasks only)</option>
-                  <option value="admin">Admin (Task Board & Lead Management)</option>
+                  <option value="admin" disabled>Admin (Disabled - Contact Owner)</option>
                 </select>
                 <span className="glow"></span>
               </div>
