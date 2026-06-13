@@ -186,6 +186,9 @@ const Dashboard = () => {
 
   // Active navigation tab
   const [activeTab, setActiveTab] = useState('overview');
+  const [taskViewMode, setTaskViewMode] = useState('kanban'); // 'kanban' | 'calendar'
+  const [calendarDate, setCalendarDate] = useState(new Date());
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(new Date());
 
   // ── Welcome popup state ──
   const [welcomeVisible, setWelcomeVisible] = useState(false);
@@ -1172,6 +1175,26 @@ const Dashboard = () => {
     }
   };
 
+  const handleDeleteTask = async (taskId) => {
+    if (!window.confirm("Are you sure you want to delete this task? This will remove all associated milestones and assignments.")) return;
+    try {
+      const resp = await authenticatedFetch(`/api/tasks/${taskId}`, {
+        method: 'DELETE'
+      });
+      if (resp.ok) {
+        fetchTasksList();
+        if (activeLeadTimeline) {
+          fetchLeadActivities(activeLeadTimeline.leadId);
+        }
+      } else {
+        const err = await resp.json();
+        alert(err.error || "Failed to delete task");
+      }
+    } catch (err) {
+      console.error("Error in handleDeleteTask:", err);
+    }
+  };
+
   const handleAddMilestone = () => {
     if (newMilestoneText.trim()) {
       setMilestonesList([...milestonesList, newMilestoneText.trim()]);
@@ -1181,7 +1204,7 @@ const Dashboard = () => {
 
   const handleCreateTask = async (e) => {
     e.preventDefault();
-    const { leadId, title, description, priority, dueDate } = newTaskForm;
+    const { leadId, title, description, priority, dueDate, scheduledAt } = newTaskForm;
     if (!title.trim()) {
       alert("Please enter a task title.");
       return;
@@ -1201,12 +1224,13 @@ const Dashboard = () => {
           description: description ? description.trim() : '',
           priority,
           dueDate: dueDate || null,
+          scheduledAt: scheduledAt || null,
           teamName: teamName.trim() || null,
           milestones: milestonesList
         })
       });
       if (resp.ok) {
-        setNewTaskForm({ leadId: '', assignedTo: '', title: '', description: '', priority: 'Medium', dueDate: '' });
+        setNewTaskForm({ leadId: '', assignedTo: '', title: '', description: '', priority: 'Medium', dueDate: '', scheduledAt: '' });
         setSelectedAssigneeIds([]);
         setTeamName('');
         setMilestonesList([]);
@@ -4063,140 +4087,22 @@ const Dashboard = () => {
 
               </div>
 
-              {/* ═══ MESSAGING & COMMUNICATION CHANNELS ═══ */}
-              <div style={{ marginTop: '16px', borderTop: '1px solid var(--line)', paddingTop: '32px' }}>
-                <div style={{ marginBottom: '20px' }}>
-                  <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--cream)', margin: '0 0 4px 0', fontFamily: "'Manrope', sans-serif" }}>Communication Channels & Sync</h2>
-                  <p style={{ fontSize: '12px', color: 'var(--fog)', margin: 0 }}>Sync your business messaging apps and email client directly to receive telemetry logs and manage client communications.</p>
-                </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                  {/* Card 1: Telegram Notifications Link */}
-                  <div className="nlp-console-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div>
-                      <div className="db-card-title-wrap" style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <span className="db-card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.5" style={{ flexShrink: 0 }}>
-                              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
-                            </svg>
-                            Telegram Messaging Link
-                          </span>
-                        </div>
-                        <span className={`outbox-badge status-${telegramStatus.linked ? 'sent' : 'failed'}`}>
-                          {telegramStatus.linked ? 'Linked' : 'Not Linked'}
-                        </span>
-                      </div>
-                      <p style={{ fontSize: '12px', color: 'var(--fog)', lineHeight: '1.5', margin: '0 0 20px 0' }}>
-                        Enable automated Telegram notification dispatching. Once authorized, the bot will automatically forward all CRM telemetry, lead generation status alerts, and delegated task updates directly to your chat feed.
-                      </p>
-                      {telegramStatus.linked && (
-                        <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--line2)', borderRadius: '6px', fontSize: '12px', color: 'var(--mist)', marginBottom: '20px' }}>
-                          Linked Chat ID: <strong style={{ color: 'var(--gold)', fontFamily: 'monospace' }}>{telegramStatus.chatId}</strong>
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      {!telegramStatus.linked ? (
-                        <>
-                          <button
-                            onClick={handleConnectTelegram}
-                            className="nlp-submit-btn"
-                            style={{ width: '100%', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
-                            Connect Telegram Account ↗
-                          </button>
-                          <div style={{ marginTop: '16px', borderTop: '1px dashed var(--line)', paddingTop: '16px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                              <span style={{ fontSize: '11px', color: 'var(--fog)' }}>Or link manually with Chat ID:</span>
-                              <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: 'var(--gold)', textDecoration: 'underline' }}>Get Chat ID ↗</a>
-                            </div>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <input
-                                type="text"
-                                className="finder-input"
-                                placeholder="e.g. 543216789"
-                                value={manualTelegramChatId}
-                                onChange={e => setManualTelegramChatId(e.target.value)}
-                                style={{ flex: 1, padding: '8px 12px', fontSize: '12px' }}
-                              />
-                              <button
-                                onClick={handleManualTelegramLink}
-                                style={{ padding: '8px 16px', fontSize: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--cream)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
-                              >
-                                Link
-                              </button>
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        <button
-                          onClick={handleDisconnectTelegram}
-                          className="crm-act-btn"
-                          style={{ width: '100%', padding: '12px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}
-                        >
-                          Unlink Telegram Account
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Card 2: Business Email Sync */}
-                  <div className="nlp-console-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div>
-                      <div className="db-card-title-wrap" style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <span className="db-card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.5" style={{ flexShrink: 0 }}>
-                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                              <polyline points="22,6 12,13 2,6" />
-                            </svg>
-                            Business Email Client Sync
-                          </span>
-                        </div>
-                        <span className={`outbox-badge status-${(emailStatus.linked && emailStatus.googleConnected) ? 'sent' : emailStatus.linked ? 'pending' : 'failed'}`}>
-                          {(emailStatus.linked && emailStatus.googleConnected) ? 'Connected' : emailStatus.linked ? 'Offline (Mock Backup)' : 'Not Configured'}
-                        </span>
-                      </div>
-                      <p style={{ fontSize: '12px', color: 'var(--fog)', lineHeight: '1.5', margin: '0 0 20px 0' }}>
-                        Sync your company email account with the CRM. Connecting will synchronize Inbox, Drafts, and Spam folders directly into your sliding Outbox history panel, allowing side-by-side management with AI Copilot pitches.
-                      </p>
-                      {emailStatus.linked && (
-                        <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--line2)', borderRadius: '6px', fontSize: '12px', color: 'var(--mist)', marginBottom: '20px' }}>
-                          Connected Account: <strong style={{ color: 'var(--gold)' }}>{currentUser?.email || emailStatus.email || 'business@lead.ai'}</strong>
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      {!emailStatus.linked ? (
-                        <button
-                          onClick={handleConnectEmail}
-                          className="nlp-submit-btn"
-                          style={{ width: '100%', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></svg>
-                          Connect Business Email Account
-                        </button>
-                      ) : (
-                        <button
-                          onClick={handleDisconnectEmail}
-                          className="crm-act-btn"
-                          style={{ width: '100%', padding: '12px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}
-                        >
-                          Unlink Email Account & Clear Cache
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
 
             </div>
           );
         })()}
 
         {activeTab === 'tasks' && (() => {
+          const isSameDay = (d1, d2) => {
+            if (!d1 || !d2) return false;
+            const date1 = new Date(d1);
+            const date2 = new Date(d2);
+            return date1.getFullYear() === date2.getFullYear() &&
+                   date1.getMonth() === date2.getMonth() &&
+                   date1.getDate() === date2.getDate();
+          };
+
           const TASK_COLS = ['Pending', 'In Progress', 'Completed'];
           const PRIORITY_META = {
             High:   { color: '#f43f5e', bg: 'rgba(244,63,94,0.12)',  dot: '#f43f5e' },
@@ -4309,7 +4215,7 @@ const Dashboard = () => {
           const resetTaskForm = () => {
             setTaskActiveMode('board');
             setSelectedTemplate(null);
-            setNewTaskForm({ leadId: '', assignedTo: '', title: '', description: '', priority: 'Medium', dueDate: '' });
+            setNewTaskForm({ leadId: '', assignedTo: '', title: '', description: '', priority: 'Medium', dueDate: '', scheduledAt: '' });
             setSelectedAssigneeIds([]);
             setTaskSelectedLeadIds([]);
             setMilestonesList([]);
@@ -4335,6 +4241,7 @@ const Dashboard = () => {
                   description: newTaskForm.description ? newTaskForm.description.trim() : '',
                   priority: newTaskForm.priority,
                   dueDate: newTaskForm.dueDate || null,
+                  scheduledAt: newTaskForm.scheduledAt || null,
                   teamName: teamName.trim() || null,
                   milestones: milestonesList,
                   templateId: selectedTemplate,
@@ -4360,23 +4267,34 @@ const Dashboard = () => {
             <div className="db-content-area" style={{ padding: '24px' }}>
 
               {/* ── TOP BAR ─────────────────────────────────────────────── */}
-              <div className="db-crm-card" style={{ marginBottom: '20px', padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div>
-                  <span className="db-card-title" style={{ fontSize: '15px' }}>Task Assignment Board</span>
-                  <p style={{ color: 'var(--fog)', fontSize: '12px', marginTop: '4px',  }}>
-                    Delegate and track tasks across your team using templates or custom workflows.
-                  </p>
+                  <h2 className="db-title-glow" style={{ fontSize: '18px', fontWeight: '700', color: 'var(--cream)', margin: 0, fontFamily: "'Outfit', sans-serif" }}>Task & Delegation Board</h2>
+                  <p style={{ fontSize: '12px', color: 'var(--fog)', margin: '4px 0 0' }}>Assign, track, and automate lead delegation workflows</p>
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   {taskActiveMode !== 'board' ? (
-                    <button onClick={resetTaskForm} style={{ padding: '9px 18px', fontSize: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--fog)', borderRadius: '8px', cursor: 'pointer',  }}>
+                    <button onClick={resetTaskForm} style={{ padding: '9px 18px', fontSize: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--fog)', borderRadius: '8px', cursor: 'pointer' }}>
                       ← Back to Board
                     </button>
                   ) : (
                     <>
                       <button
+                        onClick={() => setTaskViewMode(prev => prev === 'kanban' ? 'calendar' : 'kanban')}
+                        style={{ padding: '9px 18px', fontSize: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--cream)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          {taskViewMode === 'kanban' ? (
+                            <path d="M19 4H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM5 20V8h14v12H5z M7 10h10v2H7z M7 14h7v2H7z" fill="currentColor"/>
+                          ) : (
+                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14H5v-2h5v2zm0-4H5v-2h5v2zm0-4H5V7h5v2zm9 8h-7v-2h7v2zm0-4h-7v-2h7v2zm0-4h-7V7h7v2z" fill="currentColor"/>
+                          )}
+                        </svg>
+                        {taskViewMode === 'kanban' ? 'Calendar View' : 'Kanban View'}
+                      </button>
+                      <button
                         onClick={() => setTaskActiveMode('template')}
-                        style={{ padding: '9px 18px', fontSize: '12px', background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc', borderRadius: '8px', cursor: 'pointer',  letterSpacing: '.04em' }}
+                        style={{ padding: '9px 18px', fontSize: '12px', background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc', borderRadius: '8px', cursor: 'pointer', letterSpacing: '.04em' }}
                       >
                         Use Template
                       </button>
@@ -4453,8 +4371,8 @@ const Dashboard = () => {
                   )}
 
                   <form onSubmit={handleCreateTemplateTask} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {/* Row 1: Title + Team + Priority + Due Date */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '12px' }}>
+                    {/* Row 1: Title + Team + Priority + Scheduled Date + Due Date */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1fr 1fr 1.25fr 1.25fr', gap: '12px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                         <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Task Title *</label>
                         <input className="finder-input" required placeholder="e.g. Outreach — TechCorp" value={newTaskForm.title}
@@ -4475,6 +4393,12 @@ const Dashboard = () => {
                           <option value="Medium">Medium</option>
                           <option value="Low">Low</option>
                         </select>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Scheduled Date</label>
+                        <input type="datetime-local" className="finder-input" value={newTaskForm.scheduledAt || ''}
+                          onChange={e => setNewTaskForm({ ...newTaskForm, scheduledAt: e.target.value })}
+                          style={{ padding: '9px 12px', fontSize: '13px', colorScheme: 'dark' }} />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                         <label style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '.08em' }}>Due Date</label>
@@ -4678,8 +4602,8 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* ── KANBAN BOARD ────────────────────────────────────────── */}
-              {taskActiveMode === 'board' && (
+              {/* ── KANBAN BOARD / CALENDAR VIEW ───────────────────────── */}
+              {taskActiveMode === 'board' && taskViewMode === 'kanban' && (
                 <div className="kanban-board">
                   {TASK_COLS.map(col => {
                     const colTasks = tasksList.filter(t => t.status === col);
@@ -4691,7 +4615,7 @@ const Dashboard = () => {
                         </div>
                         <div className="kanban-col-body">
                           {colTasks.length === 0 && (
-                            <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--fog)', fontSize: '12px',  }}>
+                            <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--fog)', fontSize: '12px' }}>
                               No tasks here
                             </div>
                           )}
@@ -4713,11 +4637,17 @@ const Dashboard = () => {
                                     <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: pm.dot, marginRight: '4px' }}></span>
                                     {task.priority}
                                   </span>
-                                  {isOverdue && <span style={{ fontSize: '10px', color: '#f43f5e',  }}>OVERDUE</span>}
+                                  {isOverdue && <span className="task-card-overdue-alert" style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>OVERDUE</span>}
+                                  {task.scheduled_at && (
+                                    <span style={{ fontSize: '10px', background: 'rgba(212,163,89,0.1)', border: '1px solid rgba(212,163,89,0.25)', color: 'var(--gold)', padding: '2px 6px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                      Scheduled
+                                    </span>
+                                  )}
                                 </div>
                                 <p className="task-card-title" style={{ color: 'var(--cream)', fontWeight: '600' }}>{task.title}</p>
                                 {task.team_name && (
-                                  <div style={{ fontSize: '10px', color: 'var(--gold)',  marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  <div style={{ fontSize: '10px', color: 'var(--gold)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                                     {task.team_name}
                                   </div>
@@ -4725,6 +4655,23 @@ const Dashboard = () => {
                                 {task.description && (
                                   <p style={{ color: 'var(--fog)', fontSize: '11px', lineHeight: '1.5', marginBottom: '10px' }}>{task.description}</p>
                                 )}
+
+                                {/* Milestone progress bar */}
+                                {task.total_milestones > 0 && (
+                                  <div className="milestone-progress-container" style={{ margin: '10px 0' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', color: 'var(--fog)', marginBottom: '4px' }}>
+                                      <span>Milestones</span>
+                                      <span>{task.completed_milestones}/{task.total_milestones}</span>
+                                    </div>
+                                    <div className="milestone-progress-track">
+                                      <div 
+                                        className="milestone-progress-bar" 
+                                        style={{ width: `${(task.completed_milestones / task.total_milestones) * 100}%` }}
+                                      ></div>
+                                    </div>
+                                  </div>
+                                )}
+
                                 {task.assignees && task.assignees.length > 0 && (
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', margin: '8px 0' }}>
                                     {task.assignees.map(u => (
@@ -4742,13 +4689,19 @@ const Dashboard = () => {
                                       {linkedLead.company}
                                     </span>
                                   )}
+                                  {task.scheduled_at && (
+                                    <span style={{ color: 'var(--gold)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                      Start: {new Date(task.scheduled_at).toLocaleDateString()}
+                                    </span>
+                                  )}
                                   {task.due_date && (
-                                    <span style={{ color: isOverdue ? '#f43f5e' : 'var(--fog)', fontSize: '11px',  }}>
+                                    <span style={{ color: isOverdue ? '#f43f5e' : 'var(--fog)', fontSize: '11px' }}>
                                       Due: {new Date(task.due_date).toLocaleDateString()}
                                     </span>
                                   )}
                                 </div>
-                                <div className="task-card-actions">
+                                <div className="task-card-actions" style={{ marginTop: '8px' }}>
                                   {col !== 'In Progress' && (
                                     <button className="crm-act-btn" onClick={(e) => { e.stopPropagation(); handleTaskStatusUpdate(task.id, 'In Progress'); }}
                                       style={{ padding: '4px 10px', fontSize: '10px', background: 'rgba(168,85,247,0.1)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.2)', cursor: 'pointer' }}>
@@ -4767,6 +4720,10 @@ const Dashboard = () => {
                                       ↺ Reopen
                                     </button>
                                   )}
+                                  <button className="crm-act-btn" onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
+                                    style={{ padding: '4px 10px', fontSize: '10px', background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', cursor: 'pointer' }}>
+                                    Delete
+                                  </button>
                                 </div>
                               </div>
                             );
@@ -4775,6 +4732,413 @@ const Dashboard = () => {
                       </div>
                     );
                   })}
+                </div>
+              )}
+
+              {/* ── CALENDAR VIEW ───────────────────────────────────────── */}
+              {taskActiveMode === 'board' && taskViewMode === 'calendar' && (
+                <div className="calendar-view-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                  {/* Calendar Grid Section */}
+                  <div className="db-crm-card" style={{ padding: '24px' }}>
+                    {/* Calendar Navigation Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                      <h3 style={{ margin: 0, color: 'var(--cream)', fontSize: '16px', fontFamily: "'Outfit', sans-serif" }}>
+                        {calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                      </h3>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            const prevMonth = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
+                            setCalendarDate(prevMonth);
+                          }}
+                          style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--cream)', borderRadius: '6px', cursor: 'pointer' }}
+                        >
+                          ← Prev
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            const today = new Date();
+                            setCalendarDate(today);
+                            setSelectedCalendarDate(today);
+                          }}
+                          style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--gold)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                        >
+                          Today
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            const nextMonth = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1);
+                            setCalendarDate(nextMonth);
+                          }}
+                          style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--cream)', borderRadius: '6px', cursor: 'pointer' }}
+                        >
+                          Next →
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Weekdays row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', marginBottom: '8px', textAlign: 'center' }}>
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(dayName => (
+                        <div key={dayName} style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--fog)', letterSpacing: '0.05em', fontWeight: 600, padding: '4px' }}>
+                          {dayName}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Calendar Grid Cells */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px' }}>
+                      {(() => {
+                        const year = calendarDate.getFullYear();
+                        const month = calendarDate.getMonth();
+                        
+                        const firstDay = new Date(year, month, 1);
+                        const startDayOfWeek = firstDay.getDay();
+                        const daysInMonth = new Date(year, month + 1, 0).getDate();
+                        
+                        // Days from previous month
+                        const prevMonthDays = new Date(year, month, 0).getDate();
+                        
+                        const cells = [];
+                        
+                        // Render previous month's trailing days
+                        for (let i = startDayOfWeek - 1; i >= 0; i--) {
+                          const cellDate = new Date(year, month - 1, prevMonthDays - i);
+                          cells.push({ date: cellDate, isCurrentMonth: false });
+                        }
+                        
+                        // Render current month's days
+                        for (let i = 1; i <= daysInMonth; i++) {
+                          const cellDate = new Date(year, month, i);
+                          cells.push({ date: cellDate, isCurrentMonth: true });
+                        }
+                        
+                        // Render next month's leading days to fill 42 cells
+                        const totalCells = cells.length > 35 ? 42 : 35;
+                        const remainingCells = totalCells - cells.length;
+                        for (let i = 1; i <= remainingCells; i++) {
+                          const cellDate = new Date(year, month + 1, i);
+                          cells.push({ date: cellDate, isCurrentMonth: false });
+                        }
+                        
+                        return cells.map(({ date, isCurrentMonth }, index) => {
+                          const isToday = isSameDay(date, new Date());
+                          const isSelected = isSameDay(date, selectedCalendarDate);
+                          
+                          // Get all tasks matching this date
+                          const cellTasks = tasksList.filter(t => {
+                            return isSameDay(t.scheduled_at, date) ||
+                                   isSameDay(t.due_date, date) ||
+                                   isSameDay(t.completed_at, date) ||
+                                   isSameDay(t.created_at, date);
+                          });
+                          
+                          return (
+                            <div 
+                              key={index}
+                              onClick={() => setSelectedCalendarDate(date)}
+                              style={{
+                                minHeight: '90px',
+                                background: isSelected 
+                                  ? 'rgba(212,163,89,0.08)' 
+                                  : isCurrentMonth 
+                                    ? 'rgba(255,255,255,0.015)' 
+                                    : 'rgba(255,255,255,0.005)',
+                                border: isSelected 
+                                  ? '1px solid var(--gold)' 
+                                  : isToday 
+                                    ? '1px solid rgba(212,163,89,0.4)' 
+                                    : '1px solid var(--line)',
+                                borderRadius: '8px',
+                                padding: '6px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px',
+                                transition: 'all 0.2s',
+                                position: 'relative',
+                                opacity: isCurrentMonth ? 1 : 0.4,
+                              }}
+                              onMouseEnter={e => {
+                                if (!isSelected) {
+                                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                                }
+                              }}
+                              onMouseLeave={e => {
+                                if (!isSelected) {
+                                  e.currentTarget.style.borderColor = 'var(--line)';
+                                  e.currentTarget.style.background = isCurrentMonth 
+                                    ? 'rgba(255,255,255,0.015)' 
+                                    : 'rgba(255,255,255,0.005)';
+                                }
+                              }}
+                            >
+                              {/* Date indicator */}
+                              <div style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center',
+                                marginBottom: '4px'
+                              }}>
+                                <span style={{ 
+                                  fontSize: '11px', 
+                                  fontWeight: isToday || isSelected ? '700' : '500', 
+                                  color: isToday 
+                                    ? 'var(--gold)' 
+                                    : isSelected 
+                                      ? 'var(--cream)' 
+                                      : 'var(--fog)',
+                                }}>
+                                  {date.getDate()}
+                                </span>
+                                {isToday && (
+                                  <span style={{ 
+                                    fontSize: '8px', 
+                                    background: 'rgba(212,163,89,0.15)', 
+                                    color: 'var(--gold)', 
+                                    padding: '1px 4px', 
+                                    borderRadius: '4px',
+                                    textTransform: 'uppercase',
+                                    fontWeight: 700
+                                  }}>
+                                    Today
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Task preview list (max 2) */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, overflow: 'hidden' }}>
+                                {cellTasks.slice(0, 2).map(task => {
+                                  const pm = PRIORITY_META[task.priority] || PRIORITY_META.Medium;
+                                  return (
+                                    <div 
+                                      key={task.id}
+                                      className="calendar-cell-task-tag"
+                                      style={{
+                                        fontSize: '9px',
+                                        padding: '3px 6px',
+                                        background: task.status === 'Completed' ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.03)',
+                                        borderLeft: `2.5px solid ${task.status === 'Completed' ? '#4ade80' : pm.dot}`,
+                                        color: task.status === 'Completed' ? '#86efac' : 'var(--cream)',
+                                        borderRadius: '3px',
+                                        whiteSpace: 'nowrap',
+                                        textOverflow: 'ellipsis',
+                                        overflow: 'hidden',
+                                      }}
+                                      title={task.title}
+                                    >
+                                      {task.title}
+                                    </div>
+                                  );
+                                })}
+                                {cellTasks.length > 2 && (
+                                  <div style={{ fontSize: '8px', color: 'var(--fog)', textAlign: 'right', paddingRight: '4px', fontWeight: 600 }}>
+                                    + {cellTasks.length - 2} more
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Date Detail Drawer / Tab list section */}
+                  <div className="db-crm-card" style={{ padding: '24px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--line)', paddingBottom: '12px' }}>
+                      <div>
+                        <h4 style={{ margin: 0, color: 'var(--cream)', fontSize: '15px', fontFamily: "'Outfit', sans-serif" }}>
+                          Tasks for {selectedCalendarDate.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        </h4>
+                        <p style={{ fontSize: '11px', color: 'var(--fog)', margin: '4px 0 0' }}>
+                          Displaying tasks scheduled, assigned, due, or completed on this day.
+                        </p>
+                      </div>
+                      <span style={{ fontSize: '11px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', padding: '4px 10px', borderRadius: '6px', color: 'var(--cream)' }}>
+                        {(() => {
+                          const list = tasksList.filter(t => {
+                            return isSameDay(t.scheduled_at, selectedCalendarDate) ||
+                                   isSameDay(t.due_date, selectedCalendarDate) ||
+                                   isSameDay(t.completed_at, selectedCalendarDate) ||
+                                   isSameDay(t.created_at, selectedCalendarDate);
+                          });
+                          return `${list.length} task${list.length !== 1 ? 's' : ''}`;
+                        })()}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {(() => {
+                        const list = tasksList.filter(t => {
+                          return isSameDay(t.scheduled_at, selectedCalendarDate) ||
+                                 isSameDay(t.due_date, selectedCalendarDate) ||
+                                 isSameDay(t.completed_at, selectedCalendarDate) ||
+                                 isSameDay(t.created_at, selectedCalendarDate);
+                        });
+                        
+                        if (list.length === 0) {
+                          return (
+                            <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--fog)', fontSize: '12px' }}>
+                              No tasks scheduled, due, or completed on this date.
+                            </div>
+                          );
+                        }
+                        
+                        return list.map(task => {
+                          const pm = PRIORITY_META[task.priority] || PRIORITY_META.Medium;
+                          const linkedLead = task.lead_id ? leads.find(l => l.leadId === task.lead_id) : null;
+                          const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'Completed';
+                          
+                          return (
+                            <div 
+                              key={task.id}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                background: 'rgba(255,255,255,0.01)',
+                                border: '1px solid var(--line)',
+                                borderRadius: '8px',
+                                padding: '16px',
+                                gap: '16px',
+                                transition: 'border-color 0.2s'
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)'; }}
+                              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; }}
+                            >
+                              {/* Left side: details */}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: '10px', background: pm.bg, color: pm.color, padding: '2px 8px', borderRadius: '4px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', background: pm.dot }}></span>
+                                    {task.priority}
+                                  </span>
+                                  <span style={{ 
+                                    fontSize: '10px', 
+                                    background: task.status === 'Completed' ? 'rgba(74,222,128,0.1)' : task.status === 'In Progress' ? 'rgba(168,85,247,0.1)' : 'rgba(255,255,255,0.05)',
+                                    color: task.status === 'Completed' ? '#4ade80' : task.status === 'In Progress' ? '#c084fc' : 'var(--fog)',
+                                    padding: '2px 8px',
+                                    borderRadius: '4px',
+                                    fontWeight: 600
+                                  }}>
+                                    {task.status}
+                                  </span>
+                                  {isOverdue && <span style={{ fontSize: '10px', color: '#f43f5e', fontWeight: 600 }}>OVERDUE</span>}
+                                </div>
+                                
+                                <h5 style={{ margin: '0 0 6px 0', color: 'var(--cream)', fontSize: '14px', fontWeight: 600 }}>{task.title}</h5>
+                                {task.description && (
+                                  <p style={{ margin: '0 0 10px 0', color: 'var(--fog)', fontSize: '12px', lineHeight: '1.5' }}>{task.description}</p>
+                                )}
+
+                                {/* Milestone progress bar in calendar details */}
+                                {task.total_milestones > 0 && (
+                                  <div className="milestone-progress-container" style={{ maxWidth: '300px', marginBottom: '10px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', color: 'var(--fog)', marginBottom: '4px' }}>
+                                      <span>Milestone Progress</span>
+                                      <span>{task.completed_milestones}/{task.total_milestones}</span>
+                                    </div>
+                                    <div className="milestone-progress-track">
+                                      <div 
+                                        className="milestone-progress-bar" 
+                                        style={{ width: `${(task.completed_milestones / task.total_milestones) * 100}%` }}
+                                      ></div>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Detailed date breakdown */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px', fontSize: '10px', color: 'var(--fog)' }}>
+                                  {task.created_at && (
+                                    <div>
+                                      <span style={{ color: 'var(--mist)', fontWeight: 600 }}>Assign Date:</span> {new Date(task.created_at).toLocaleDateString()}
+                                    </div>
+                                  )}
+                                  {task.scheduled_at && (
+                                    <div>
+                                      <span style={{ color: 'var(--gold)', fontWeight: 600 }}>Schedule Date:</span> {new Date(task.scheduled_at).toLocaleString()}
+                                    </div>
+                                  )}
+                                  {task.due_date && (
+                                    <div>
+                                      <span style={{ color: isOverdue ? '#f43f5e' : 'var(--cream)', fontWeight: 600 }}>Due/Close Date:</span> {new Date(task.due_date).toLocaleDateString()}
+                                    </div>
+                                  )}
+                                  {task.completed_at && (
+                                    <div>
+                                      <span style={{ color: '#4ade80', fontWeight: 600 }}>Complete Date:</span> {new Date(task.completed_at).toLocaleString()}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Assignees & Lead */}
+                                <div style={{ display: 'flex', gap: '12px', marginTop: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                  {linkedLead && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--gold)', fontSize: '11px' }}>
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                      {linkedLead.company}
+                                    </span>
+                                  )}
+                                  {task.assignees && task.assignees.length > 0 && (
+                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                      {task.assignees.map(u => (
+                                        <span key={u.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line2)', padding: '2px 6px', borderRadius: '4px', color: 'var(--mist)', fontSize: '10px' }}>
+                                          {u.first_name} {u.last_name?.charAt(0)}.
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Right side: quick status & delete controls */}
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                {task.status !== 'In Progress' && (
+                                  <button 
+                                    type="button"
+                                    onClick={() => handleTaskStatusUpdate(task.id, 'In Progress')}
+                                    style={{ padding: '6px 12px', fontSize: '11px', background: 'rgba(168,85,247,0.1)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.2)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                                  >
+                                    In Progress
+                                  </button>
+                                )}
+                                {task.status !== 'Completed' && (
+                                  <button 
+                                    type="button"
+                                    onClick={() => handleTaskStatusUpdate(task.id, 'Completed')}
+                                    style={{ padding: '6px 12px', fontSize: '11px', background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                                  >
+                                    Done
+                                  </button>
+                                )}
+                                {task.status !== 'Pending' && (
+                                  <button 
+                                    type="button"
+                                    onClick={() => handleTaskStatusUpdate(task.id, 'Pending')}
+                                    style={{ padding: '6px 12px', fontSize: '11px', background: 'rgba(255,255,255,0.03)', color: 'var(--fog)', border: '1px solid var(--line)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                                  >
+                                    Reopen
+                                  </button>
+                                )}
+                                <button 
+                                  type="button"
+                                  onClick={() => handleDeleteTask(task.id)}
+                                  style={{ padding: '6px 12px', fontSize: '11px', background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -5293,6 +5657,131 @@ const Dashboard = () => {
                   </form>
                 </div>
               )}
+            </div>
+
+            {/* ═══ SYSTEM SETTINGS & INTEGRATIONS HEADER ═══ */}
+            <div style={{ maxWidth: '600px', margin: '32px auto 8px', borderTop: '1px solid var(--line)', paddingTop: '24px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--cream)', margin: '0 0 4px 0', fontFamily: "'Manrope', sans-serif" }}>Communication Channels & Sync</h2>
+              <p style={{ fontSize: '12px', color: 'var(--fog)', margin: 0 }}>Sync your business messaging apps and email client directly to receive telemetry logs and manage client communications.</p>
+            </div>
+
+            {/* Telegram Notifications Link Card */}
+            <div className="db-crm-card" style={{ maxWidth: '600px', margin: '24px auto 24px', padding: '32px 40px', background: 'var(--ink2)', border: '1px solid var(--line)', marginTop: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div className="db-card-title-wrap" style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span className="db-card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                      </svg>
+                      Telegram Messaging Link
+                    </span>
+                  </div>
+                  <span className={`outbox-badge status-${telegramStatus.linked ? 'sent' : 'failed'}`}>
+                    {telegramStatus.linked ? 'Linked' : 'Not Linked'}
+                  </span>
+                </div>
+                <p style={{ fontSize: '12px', color: 'var(--fog)', lineHeight: '1.5', margin: '0 0 20px 0' }}>
+                  Enable automated Telegram notification dispatching. Once authorized, the bot will automatically forward all CRM telemetry, lead generation status alerts, and delegated task updates directly to your chat feed.
+                </p>
+                {telegramStatus.linked && (
+                  <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--line2)', borderRadius: '6px', fontSize: '12px', color: 'var(--mist)', marginBottom: '20px' }}>
+                    Linked Chat ID: <strong style={{ color: 'var(--gold)', fontFamily: 'monospace' }}>{telegramStatus.chatId}</strong>
+                  </div>
+                )}
+              </div>
+              <div>
+                {!telegramStatus.linked ? (
+                  <>
+                    <button
+                      onClick={handleConnectTelegram}
+                      className="nlp-submit-btn"
+                      style={{ width: '100%', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
+                      Connect Telegram Account ↗
+                    </button>
+                    <div style={{ marginTop: '16px', borderTop: '1px dashed var(--line)', paddingTop: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--fog)' }}>Or link manually with Chat ID:</span>
+                        <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: 'var(--gold)', textDecoration: 'underline' }}>Get Chat ID ↗</a>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                          type="text"
+                          className="finder-input"
+                          placeholder="e.g. 543216789"
+                          value={manualTelegramChatId}
+                          onChange={e => setManualTelegramChatId(e.target.value)}
+                          style={{ flex: 1, padding: '8px 12px', fontSize: '12px' }}
+                        />
+                        <button
+                          onClick={handleManualTelegramLink}
+                          style={{ padding: '8px 16px', fontSize: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', color: 'var(--cream)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+                        >
+                          Link
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    onClick={handleDisconnectTelegram}
+                    className="crm-act-btn"
+                    style={{ width: '100%', padding: '12px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}
+                  >
+                    Unlink Telegram Account
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Business Email Sync Card */}
+            <div className="db-crm-card" style={{ maxWidth: '600px', margin: '24px auto 24px', padding: '32px 40px', background: 'var(--ink2)', border: '1px solid var(--line)', marginTop: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div className="db-card-title-wrap" style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span className="db-card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                        <polyline points="22,6 12,13 2,6" />
+                      </svg>
+                      Business Email Client Sync
+                    </span>
+                  </div>
+                  <span className={`outbox-badge status-${(emailStatus.linked && emailStatus.googleConnected) ? 'sent' : emailStatus.linked ? 'pending' : 'failed'}`}>
+                    {(emailStatus.linked && emailStatus.googleConnected) ? 'Connected' : emailStatus.linked ? 'Offline (Mock Backup)' : 'Not Configured'}
+                  </span>
+                </div>
+                <p style={{ fontSize: '12px', color: 'var(--fog)', lineHeight: '1.5', margin: '0 0 20px 0' }}>
+                  Sync your company email account with the CRM. Connecting will synchronize Inbox, Drafts, and Spam folders directly into your sliding Outbox history panel, allowing side-by-side management with AI Copilot pitches.
+                </p>
+                {emailStatus.linked && (
+                  <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--line2)', borderRadius: '6px', fontSize: '12px', color: 'var(--mist)', marginBottom: '20px' }}>
+                    Connected Account: <strong style={{ color: 'var(--gold)' }}>{currentUser?.email || emailStatus.email || 'business@lead.ai'}</strong>
+                  </div>
+                )}
+              </div>
+              <div>
+                {!emailStatus.linked ? (
+                  <button
+                    onClick={handleConnectEmail}
+                    className="nlp-submit-btn"
+                    style={{ width: '100%', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></svg>
+                    Connect Business Email Account
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleDisconnectEmail}
+                    className="crm-act-btn"
+                    style={{ width: '100%', padding: '12px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}
+                  >
+                    Unlink Email Account & Clear Cache
+                  </button>
+                )}
+              </div>
             </div>
           </>
         );

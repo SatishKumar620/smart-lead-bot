@@ -2891,4 +2891,90 @@ body:has(.db-map-wrapper:hover) #cr {
   }
 }
 
+/* ─────────────────────────────────────────────
+   CALENDAR VIEW STYLING & ANIMATIONS
+   ───────────────────────────────────────────── */
+.calendar-view-container {
+  animation: calendarFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes calendarFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.calendar-cell-task-tag {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.calendar-cell-task-tag:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* ── PREMIUM KANBAN UPGRADES ── */
+.task-card {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  background: var(--ink2) !important;
+  border: 1px solid var(--line) !important;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+}
+
+.task-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(212, 163, 89, 0.3), transparent);
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
+
+.task-card:hover {
+  transform: translateY(-3px) !important;
+  border-color: rgba(212, 163, 89, 0.4) !important;
+  box-shadow: 0 8px 24px rgba(212, 163, 89, 0.12) !important;
+}
+
+.task-card:hover::before {
+  transform: scaleX(1);
+}
+
+/* Milestone progress bars */
+.milestone-progress-container {
+  margin: 10px 0;
+}
+
+.milestone-progress-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.milestone-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold) 0%, #a855f7 100%);
+  border-radius: 2px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Pulse effects for status badges */
+@keyframes statusPulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.05); opacity: 1; }
+}
+
+.task-card-overdue-alert {
+  animation: statusPulse 1.5s infinite ease-in-out;
+  background: rgba(244, 63, 94, 0.12) !important;
+  color: #f43f5e !important;
+  border: 1px solid rgba(244, 63, 94, 0.3) !important;
+}
+
 

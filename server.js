@@ -241,6 +241,8 @@ pool.query(`
       sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
   CREATE INDEX IF NOT EXISTS idx_user_emails_user_folder ON user_emails(user_id, folder);
+  ALTER TABLE tasks ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP WITH TIME ZONE;
+  ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE;
 `).then(() => {
   console.log('PostgreSQL: Tables and extensions verified.');
 }).catch(err => {
@@ -604,7 +606,9 @@ app.get('/api/tasks', async (req, res) => {
                  )
                ) FILTER (WHERE u.id IS NOT NULL),
                '[]'::jsonb
-             ) as assignees
+             ) as assignees,
+             (SELECT COUNT(*) FROM task_milestones WHERE task_id = t.id) as total_milestones,
+             (SELECT COUNT(*) FROM task_milestones WHERE task_id = t.id AND completed = true) as completed_milestones
       FROM tasks t
       LEFT JOIN leads l ON t.lead_id = l.lead_id
       LEFT JOIN task_assignments ta ON t.id = ta.task_id
@@ -620,7 +624,7 @@ app.get('/api/tasks', async (req, res) => {
 
 app.post('/api/tasks', async (req, res) => {
   try {
-    const { leadId, assignedUserIds, title, description, priority, dueDate, teamName, milestones } = req.body;
+    const { leadId, assignedUserIds, title, description, priority, dueDate, teamName, milestones, scheduledAt } = req.body;
     if (!title || !assignedUserIds || !Array.isArray(assignedUserIds) || assignedUserIds.length === 0) {
       return res.status(400).json({ error: 'Missing title or assignedUserIds array' });
     }
@@ -629,10 +633,10 @@ app.post('/api/tasks', async (req, res) => {
     
     // Insert into tasks table
     const taskRes = await pool.query(`
-      INSERT INTO tasks (lead_id, assigned_to, title, description, priority, due_date, team_name)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO tasks (lead_id, assigned_to, title, description, priority, due_date, team_name, scheduled_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
-    `, [leadId || null, firstAssignee, title, description || '', priority || 'Medium', dueDate || null, teamName || null]);
+    `, [leadId || null, firstAssignee, title, description || '', priority || 'Medium', dueDate || null, teamName || null, scheduledAt || null]);
     
     const newTask = taskRes.rows[0];
     
@@ -824,19 +828,69 @@ app.get('/api/tasks/:taskId', async (req, res) => {
 app.put('/api/tasks/:taskId', async (req, res) => {
   try {
     const { taskId } = req.params;
-    const { status } = req.body;
-    if (!status) {
-      return res.status(400).json({ error: 'Missing status' });
-    }
-    const taskCheck = await pool.query('SELECT title, lead_id FROM tasks WHERE id = $1', [taskId]);
+    const { status, title, description, priority, dueDate, scheduledAt, completedAt } = req.body;
+    
+    const taskCheck = await pool.query('SELECT title, lead_id, status FROM tasks WHERE id = $1', [taskId]);
     if (taskCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Task not found' });
     }
-    const { title, lead_id: leadId } = taskCheck.rows[0];
+    const existingTask = taskCheck.rows[0];
+    const originalTitle = existingTask.title;
+    const leadId = existingTask.lead_id;
 
-    await pool.query('UPDATE tasks SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [status, taskId]);
+    // Dynamically build the UPDATE query
+    let setFields = [];
+    let queryParams = [];
+    let paramIndex = 1;
 
-    const desc = `Task "${title}" updated to status: "${status}".`;
+    if (status !== undefined) {
+      setFields.push(`status = $${paramIndex++}`);
+      queryParams.push(status);
+      
+      // Handle auto-completion timestamp
+      if (status === 'Completed' && existingTask.status !== 'Completed') {
+        setFields.push(`completed_at = CURRENT_TIMESTAMP`);
+      } else if (status !== 'Completed' && existingTask.status === 'Completed') {
+        setFields.push(`completed_at = NULL`);
+      }
+    }
+    if (title !== undefined) {
+      setFields.push(`title = $${paramIndex++}`);
+      queryParams.push(title);
+    }
+    if (description !== undefined) {
+      setFields.push(`description = $${paramIndex++}`);
+      queryParams.push(description);
+    }
+    if (priority !== undefined) {
+      setFields.push(`priority = $${paramIndex++}`);
+      queryParams.push(priority);
+    }
+    if (dueDate !== undefined) {
+      setFields.push(`due_date = $${paramIndex++}`);
+      queryParams.push(dueDate);
+    }
+    if (scheduledAt !== undefined) {
+      setFields.push(`scheduled_at = $${paramIndex++}`);
+      queryParams.push(scheduledAt);
+    }
+    if (completedAt !== undefined) {
+      setFields.push(`completed_at = $${paramIndex++}`);
+      queryParams.push(completedAt);
+    }
+
+    setFields.push(`updated_at = CURRENT_TIMESTAMP`);
+    queryParams.push(taskId);
+
+    if (setFields.length > 1) {
+      const updateQuery = `UPDATE tasks SET ${setFields.join(', ')} WHERE id = $${paramIndex}`;
+      await pool.query(updateQuery, queryParams);
+    }
+
+    const currentTitle = title || originalTitle;
+    const currentStatus = status || existingTask.status;
+    const desc = `Task "${currentTitle}" updated (status: "${currentStatus}").`;
+    
     if (leadId) {
       await pool.query(
         'INSERT INTO lead_activities (lead_id, user_id, action_type, description) VALUES ($1, $2, $3, $4)',
@@ -844,10 +898,14 @@ app.put('/api/tasks/:taskId', async (req, res) => {
       );
     }
     
-    // Add comment about status update
+    // Add comment about task update
+    let commentText = `Task details updated.`;
+    if (status !== undefined) {
+      commentText = `Status updated to: ${status}`;
+    }
     await pool.query(
       'INSERT INTO task_comments (task_id, user_id, comment) VALUES ($1, $2, $3)',
-      [taskId, req.user.id, `Status updated to: ${status}`]
+      [taskId, req.user.id, commentText]
     );
 
     // ── In-app notifications for status change ──
@@ -895,6 +953,35 @@ app.put('/api/tasks/:taskId', async (req, res) => {
     }
 
     res.json({ message: 'Task updated successfully', status });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/tasks/:taskId', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const taskCheck = await pool.query('SELECT title, lead_id FROM tasks WHERE id = $1', [taskId]);
+    if (taskCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    const { title, lead_id: leadId } = taskCheck.rows[0];
+
+    // Explicitly delete related records
+    await pool.query('DELETE FROM task_assignments WHERE task_id = $1', [taskId]);
+    await pool.query('DELETE FROM task_milestones WHERE task_id = $1', [taskId]);
+    await pool.query('DELETE FROM task_comments WHERE task_id = $1', [taskId]);
+    await pool.query('DELETE FROM tasks WHERE id = $1', [taskId]);
+
+    if (leadId) {
+      const logDesc = `Deleted task "${title}".`;
+      await pool.query(
+        'INSERT INTO lead_activities (lead_id, user_id, action_type, description) VALUES ($1, $2, $3, $4)',
+        [leadId, req.user.id, 'Task Logged', logDesc]
+      );
+    }
+
+    res.json({ message: 'Task deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
