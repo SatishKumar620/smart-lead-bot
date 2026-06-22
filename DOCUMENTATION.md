@@ -42,6 +42,9 @@ The primary objectives of the Smart Lead Bot project are to modernize B2B lead w
 
 The Smart Lead Bot architecture relies on a highly responsive, secure, and modular layer system. The primary layers include:
 
+![System Architecture](./public/images/system_architecture.png)
+
+
 ### Database (Data Layer)
 - **PostgreSQL** acts as the core relational data store. It contains schemas for leads, users, tasks, task milestones, task assignments, lead activities, Google Workspace config, and sent email outbox logs. Startup migration logic dynamically seeds missing tables and adds scheduling fields.
 
@@ -151,6 +154,9 @@ The life cycle of a lead in the Smart Lead Bot pipeline follows a structured, au
 
 The **n8n Automation Engine** manages background jobs and webhook notifications, declared in `workflow.json`:
 
+![System Integration](./public/images/system_integration.png)
+
+
 ### Webhook Routing
 The project defines webhook trigger nodes that receive B2B lead updates, Google Form submissions, and Telegram pairing requests. These webhooks parse JSON payloads, route them to Postgres nodes, and return structured JSON responses.
 
@@ -180,6 +186,9 @@ Access tokens, refresh tokens, and database passwords are encrypted at rest. Fro
 ## 8. Deployment Architecture & Build Parity
 
 Smart Lead Bot implements a Dockerized dual-target deployment framework, guaranteeing seamless parity between development, staging, and production environments.
+
+![Deployment Architecture](./public/images/system_deployment.png)
+
 
 ### Docker Containerization
 The project defines a single multi-stage `Dockerfile` that compiles the React application using Vite, copies the backend files, and exposes port `7860`. The Node.js application serves the static compiled `dist` directory on the root path and registers all API endpoints on `/api`.
