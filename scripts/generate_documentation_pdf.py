@@ -159,7 +159,7 @@ def generate_pdf():
         ('1. Introduction', '3'),
         ('2. Project Objectives', '3'),
         ('3. System Architecture & Tech Stack', '4'),
-        ('4. Core Features Overview', '4'),
+        ('4. Comprehensive Features Blueprint', '4'),
         ('5. End-to-End System Workflow', '6'),
         ('6. n8n Automation Engine & Webhooks', '6'),
         ('7. Security Considerations & Storage Parity', '7'),
@@ -216,35 +216,61 @@ def generate_pdf():
     add_section_header(pdf, 'Automation & Webhooks (Integration Layer)')
     write_rich_paragraph(pdf, 'An **n8n Automation Engine** coordinates complex external workflows (like sending telemetry triggers and parsing webhook payloads), while the **Telegram Bot API** and **Google Gmail API** handle outbound notifications and email communications.')
 
-    # ── 4. CORE FEATURES OVERVIEW ──
+    # ── 4. COMPREHENSIVE FEATURES BLUEPRINT ──
     pdf.add_page()
-    add_chapter_header(pdf, '4. Core Features Overview')
-    write_rich_paragraph(pdf, 'The dashboard coordinates five primary functional areas to manage B2B intelligence and team operations:')
+    add_chapter_header(pdf, '4. Comprehensive Features Blueprint')
+    write_rich_paragraph(pdf, 'The Smart Lead Bot dashboard coordinates an extensive suite of B2B features to manage leads, tasks, and sales communications:')
     
-    add_section_header(pdf, '1. Dynamic Ingest Templates & Custom Fields')
-    write_rich_paragraph(pdf, 'CRM administrators are no longer locked into static form fields. The **Custom Field Creator** allows definition of custom database fields (types: `text`, `number`, `url`, `email`, `date`) and mandatory switches. Administrators can save their configurations as named **Ingestion Templates**, which dynamically render inputs on the Quick Ingest card.')
+    add_section_header(pdf, '1. Lead Ingestion & Parsing Engine')
+    write_bullet_item(pdf, '**Single Intake**: Quick Ingest card allows manual input of core details and custom variables.')
+    write_bullet_item(pdf, '**Dynamic Bulk Parser**: Accepts uploads in CSV, Excel, and JSON formats, mapping custom attributes to the lead\'s JSON store.')
+    write_bullet_item(pdf, '**Null-Handling Integrity**: Avoids filling missing cells with default values, writing them strictly as `null` in the database.')
     
-    add_section_header(pdf, '2. B2B Leads Directory & Opportunity Meters')
-    write_rich_paragraph(pdf, 'The B2B Leads Directory lists all crawled leads, custom field tags, and assignment states. A horizontal **Opportunity Meter** aggregates leads data to visualize website, social, and marketing gaps in real time. The directory has a stable, memoized **Map Viewport** that renders B2B locations with custom pulsing markers.')
+    add_section_header(pdf, '2. Custom Fields & Ingestion Templates')
+    write_bullet_item(pdf, '**Schema Creator**: Allows administrators to define custom B2B fields (types: `text`, `number`, `url`, `email`, `date`) and toggle required switches.')
+    write_bullet_item(pdf, '**Ingestion Templates**: Schemas can be saved as named templates. Selecting a template dynamically updates the Quick Ingest form.')
+    write_bullet_item(pdf, '**Leads Directory & Inline Editor**: Custom field attributes render dynamically as compact badges next to website URLs and integrate into the inline lead editing modal.')
     
-    add_section_header(pdf, '3. Interactive Task Board (Kanban Mode)')
-    write_rich_paragraph(pdf, 'Tasks are split into Pending, In Progress, and Completed columns. The Kanban cards feature custom priority badges, scheduled clock icons, overdue alerts, and an inline **Milestone Progress Bar** displaying completion counts (e.g., `3/5 Milestones`). Teammates can cycle task status with a single click.')
+    add_section_header(pdf, '3. Real-time Opportunity Meters & Analytics')
+    write_rich_paragraph(pdf, 'Aggregates database stats to identify B2B opportunity gaps. Displays percentage opportunity scores via HSL color-coded horizontal bars (Website gap: Orange, Social gap: Yellow, Marketing gap: Blue) to instantly guide outbound outreach.')
     
-    # ── CORE FEATURES PART 2 ──
+    add_section_header(pdf, '4. Geocoded Mapping Viewport')
+    write_rich_paragraph(pdf, 'Stabilizes viewport zoom using React\'s `useMemo` and tracks initialization states with reference flags. Displays B2B opportunities on the map with color-coded pulsing dots indicating lead temperatures (Hot: Red, Warm: Gold, Cold: Blue).')
+    
+    add_section_header(pdf, '5. Resilient B2B Crawler Fallback')
+    write_rich_paragraph(pdf, 'Queries Wikipedia and OpenStreetMap nodes. When API rate-limits occur, the server dynamically invokes a mock crawler generator matching the exact city and sector to seed the database with realistic fallback leads.')
+    
+    # ── FEATURES PAGE 2 ──
     pdf.add_page()
-    add_section_header(pdf, '4. Task Board Calendar View')
-    write_rich_paragraph(pdf, 'Toggling the **Calendar View** button swaps the Kanban grid for a premium monthly interactive calendar. Designed for scheduling clarity:')
-    write_bullet_item(pdf, '**Date Layout**: Displays a 7-column monthly grid with previous/next month navigation buttons and a "Today" quick-jump button.')
-    write_bullet_item(pdf, '**Date Matching**: Dynamically places tasks on cells corresponding to their assign date (`created_at`), schedule start date (`scheduled_at`), due date (`due_date`), or completion date (`completed_at`).')
-    write_bullet_item(pdf, '**Compact Cell Render**: Shows at most two task badges per day cell to avoid layout clutter, displaying `+ N more` indicators for extra tasks.')
-    write_bullet_item(pdf, '**Date Detail Panel**: Clicking any day cell renders a sleek, details list of all tasks on that day, showing task metadata (exact start/due/complete times, milestone progress trackers, assignees) and quick action buttons (In Progress, Done, Reopen, Delete).')
+    add_section_header(pdf, '6. Interactive Kanban Task Board')
+    write_rich_paragraph(pdf, 'Splits tasks into Pending, In Progress, and Completed columns. Task cards feature compact progress bars showing completed milestone counts (e.g. `2/5 Milestones`), custom priority colors, scheduled start dates, pulsing red overdue flags, and quick action status buttons.')
     
-    add_section_header(pdf, '5. Unified settings & Communication Hub')
-    write_rich_paragraph(pdf, 'To streamline setup, all integration controls are centralized under the **Account settings (Profile)** tab:')
-    write_bullet_item(pdf, '**Google Workspace**: Configure Client Credentials, perform OAuth login, and enable dynamic Google Forms creation and sync.')
-    write_bullet_item(pdf, '**Telegram Bot Link**: Pair your dashboard user profile with the Telegram Bot by deep-linking to `@Smart_leadintel_bot` or inputting your Chat ID manually.')
-    write_bullet_item(pdf, '**Business Email Client Sync**: Sync your Gmail account to enable a multi-folder sync client (Inbox, Drafts, Outbox, Copilot Outbox, Spam) and review sent outreach emails directly in the Outbox Drawer.')
-    write_bullet_item(pdf, '**Locked State Security**: When Gmail is unlinked, the mail client displays a clean locked screen, preventing access until authorized via Google OAuth.')
+    add_section_header(pdf, '7. Task Board Calendar View')
+    write_rich_paragraph(pdf, 'Toggles the task pipeline into an interactive monthly grid with previous/next month controls and a "Today" quick-jump button. Places tasks on day cells corresponding to their assign date (`created_at`), scheduled start date (`scheduled_at`), due date (`due_date`), or completion date (`completed_at`). Cells limit tasks shown to a maximum of two, showing a trailing count indicator for extra tasks. Clicking a date opens a sleek drawer details list with status update and delete controls.')
+    
+    add_section_header(pdf, '8. Unified Integration Settings (Profile Tab)')
+    write_rich_paragraph(pdf, 'Centralizes Google OAuth, Telegram Bot pairing, and Business Email sync settings under the Profile settings tab. If pre-configured in environment variables, credentials forms are collapsed by default with an active configuration banner shown.')
+    
+    add_section_header(pdf, '9. Real-time Gmail Multi-folder Sync Client')
+    write_rich_paragraph(pdf, 'Once authorized via Google consent screen, the Outbox sliding drawer loads real-time Gmail messages (Inbox, Drafts, Outbox (Sent), and Spam). Houses search bars, keyword filters, sent-status badges, and monospace email content viewers. Displays locked screens and offline mock warnings if credentials are not linked.')
+    
+    add_section_header(pdf, '10. Telegram Bot Dispatcher')
+    write_rich_paragraph(pdf, 'Deep-links users directly to `@Smart_leadintel_bot` with base64 encoded user ID payloads. The bot webhook endpoint parses interactions, pairs chat IDs to user accounts in the database, and returns confirmation messages. Dispatches alert payloads to MarkdownV2 formatting.')
+    
+    add_section_header(pdf, '11. Comprehensive Lead Reports Exporter')
+    write_rich_paragraph(pdf, 'Supports exporting B2B leads data in Excel, CSV, and JSON formats, filtering by Daily, Weekly, Monthly, Yearly, and All-Time ranges.')
+    
+    add_section_header(pdf, '12. Activity Timeline Drawer')
+    write_rich_paragraph(pdf, 'Slides out from the viewport edge to display historical activities (Leads Assigned, Status updates, Notes added, Tasks logged) and allows teammates to post custom text notes directly onto a lead\'s activity history.')
+    
+    add_section_header(pdf, '13. Signup/Signin & User Role Lockdown')
+    write_rich_paragraph(pdf, 'Restricts dashboard access to authenticated users and disables the "Admin" role option in the sign-up page, defaulting registrations to standard team "User" status.')
+    
+    add_section_header(pdf, '14. Database Cascade Integrity')
+    write_rich_paragraph(pdf, 'Deleting a lead automatically clears associated entries in `tasks`, `task_assignments`, `task_milestones`, `task_comments`, and `lead_activities` to prevent foreign key errors. Deleting a task clears milestones, comments, and assignments.')
+    
+    add_section_header(pdf, '15. Mobile Layout & Responsive Sidebar')
+    write_rich_paragraph(pdf, 'Transitions the dashboard menu on mobile into a vertical, touch-accessible icon sidebar. Locks laptop viewport height to `100vh` to prevent layout clipping and applies bottom offsets to scroll containers.')
 
     # ── 5. END-TO-END SYSTEM WORKFLOW ──
     pdf.add_page()

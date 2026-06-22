@@ -8,7 +8,7 @@ Welcome to the comprehensive technical documentation for the **Smart Lead Bot** 
 1. [Introduction](#1-introduction)
 2. [Project Objectives](#2-project-objectives)
 3. [System Architecture & Tech Stack](#3-system-architecture--tech-stack)
-4. [Core Features Overview](#4-core-features-overview)
+4. [Comprehensive Features Blueprint](#4-comprehensive-features-blueprint)
 5. [End-to-End System Workflow](#5-end-to-end-system-workflow)
 6. [n8n Automation Engine & Webhooks](#6-n8n-automation-engine--webhooks)
 7. [Security Considerations & Storage Parity](#7-security-considerations--storage-parity)
@@ -56,32 +56,81 @@ The Smart Lead Bot architecture relies on a highly responsive, secure, and modul
 
 ---
 
-## 4. Core Features Overview
+## 4. Comprehensive Features Blueprint
 
-The dashboard coordinates five primary functional areas to manage B2B intelligence and team operations:
+The Smart Lead Bot dashboard coordinates an extensive suite of B2B features to manage leads, tasks, and sales communications:
 
-### 1. Dynamic Ingest Templates & Custom Fields
-CRM administrators are no longer locked into static form fields. The **Custom Field Creator** allows definition of custom database fields (types: `text`, `number`, `url`, `email`, `date`) and mandatory switches. Administrators can save their configurations as named **Ingestion Templates**, which dynamically render inputs on the Quick Ingest card.
+### 1. Lead Ingestion & Parsing Engine
+- **Single Intake**: The Quick Ingest card allows manual input of core details (company name, city, industry, site, etc.) and custom variables.
+- **Dynamic Bulk File Parser**: Accepts file uploads in CSV, Excel, and JSON formats. It dynamically extracts all columns, mapping custom attributes to the lead's JSON store.
+- **Null-Handling Integrity**: Avoids filling empty or missing spreadsheet cells with arbitrary default values (like "Other" or "Bangalore"), writing them strictly as `null` in the database to preserve data accuracy.
 
-### 2. B2B Leads Directory & Opportunity Meters
-The B2B Leads Directory lists all crawled leads, custom field tags, and assignment states. A horizontal **Opportunity Meter** aggregates leads data to visualize website, social, and marketing gaps in real time. The directory has a stable, memoized **Map Viewport** that renders B2B locations with custom pulsing markers.
+### 2. Custom Fields & Ingestion Templates
+- **Schema Creator**: Allows administrators to define custom B2B fields (types: `text`, `number`, `url`, `email`, `date`) and toggle required switches.
+- **Ingestion Templates**: Schemas can be saved as named templates. Selecting a template dynamically updates the Quick Ingest form layout.
+- **Leads Directory Display**: Custom field attributes render dynamically as compact badges next to website URLs in the directory lists.
+- **Inline Editor Integration**: Supports inline editing of custom fields alongside core attributes within the Lead details modal.
 
-### 3. Interactive Task Board (Kanban Mode)
-Tasks are split into Pending, In Progress, and Completed columns. The Kanban cards feature custom priority badges, scheduled clock icons, overdue alerts, and an inline **Milestone Progress Bar** displaying completion counts (e.g., `3/5 Milestones`). Teammates can cycle task status with a single click.
+### 3. Real-time Opportunity Meters & Analytics
+- **B2B Opportunity Gaps**: Aggregates database stats to identify gaps in B2B website quality, social media presence, and local marketing.
+- **Horizontal Progress Gauges**: Displays percentage opportunity scores via HSL color-coded horizontal bars (Website gap: Orange, Social gap: Yellow, Marketing gap: Blue) to instantly guide outbound outreach priorities.
 
-### 4. Task Board Calendar View
-Toggling the **Calendar View** button swaps the Kanban grid for a premium monthly interactive calendar. Designed for scheduling clarity:
-- **Date Layout**: Displays a 7-column monthly grid with previous/next month navigation buttons and a "Today" quick-jump button.
-- **Date Matching**: Dynamically places tasks on cells corresponding to their assign date (`created_at`), schedule start date (`scheduled_at`), due date (`due_date`), or completion date (`completed_at`).
-- **Compact Cell Render**: Shows at most two task badges per day cell to avoid layout clutter, displaying `+ N more` indicators for extra tasks.
-- **Date Detail Panel**: Clicking any day cell renders a sleek, details list of all tasks on that day, showing task metadata (exact start/due/complete times, milestone progress trackers, assignees) and quick action buttons (In Progress, Done, Reopen, Delete).
+### 4. Geocoded Mapping Viewport
+- **Stable Viewport Zoom**: Memoizes B2B markers using React's `useMemo` and tracks initialization states with reference flags. Clicking markers or editing details does not trigger unwanted zoom changes or map jumps.
+- **Custom Pulse Markers**: Displays B2B opportunities on the map with color-coded pulsing dots indicating lead temperatures (Hot: Red, Warm: Gold, Cold: Blue).
 
-### 5. Unified Settings & Communication Hub
-To streamline setup, all integration controls are centralized under the **Account Settings (Profile)** tab:
-- **Google Workspace**: Configure Client Credentials, perform OAuth login, and enable dynamic Google Forms creation and sync.
-- **Telegram Bot Link**: Pair your dashboard user profile with the Telegram Bot by deep-linking to `@Smart_leadintel_bot` or inputting your Chat ID manually.
-- **Business Email Sync**: Sync your Gmail account to enable a multi-folder sync client (Inbox, Drafts, Outbox, Copilot Outbox, Spam) and review sent outreach emails directly in the Outbox Drawer.
-- **Locked State Security**: When Gmail is unlinked, the mail client displays a clean locked screen, preventing access until authorized via Google OAuth.
+### 5. Resilient B2B Crawler Fallback
+- **Public API Scrapers**: Crawler endpoints query Wikipedia and OpenStreetMap nodes based on niche and city inputs.
+- **Rules-Based Mock Fallback**: When API rate-limits or blocks occur (e.g. from sandboxed cloud IPs), the server dynamically invokes a mock crawler generator matching the exact city and sector to seed the database with high-fidelity, realistic fallback leads.
+
+### 6. Interactive Kanban Task Board
+- **Three-Column Status Pipeline**: Splits tasks into Pending, In Progress, and Completed columns.
+- **Milestone Progress Tracking**: Task cards feature compact progress bars and completed milestone indicators (e.g. `2/5 Milestones`).
+- **Overdue & Schedule Badges**: Displays custom priority colors, scheduled start dates, and pulsing red overdue flags on active cards.
+- **Status Change Handlers**: Teammates can click quick status action buttons to cycle tasks through progress states.
+
+### 7. Task Board Calendar View
+- **7-Column Monthly Layout**: Toggles the task pipeline into an interactive monthly grid with previous/next month controls and a "Today" quick-jump button.
+- **Date Matching Engine**: Places tasks on day cells corresponding to their assign date (`created_at`), scheduled start date (`scheduled_at`), due date (`due_date`), or completion date (`completed_at`).
+- **Compact List Rendering**: Day cells limit tasks shown directly to a maximum of two, showing a trailing count (e.g. `+ 3 more`) for dates with extra tasks.
+- **Sleek Date Detail Drawer**: Clicking any date cell opens a details pane showing full metadata for all tasks on that day, including assignees, milestone progress percentages, and action controls to update status or delete tasks.
+
+### 8. Unified Integration Settings (Profile Tab)
+- **Settings Relocation**: Centralizes Google OAuth, Telegram Bot pairing, and Business Email sync settings under the Profile settings tab, keeping them out of main directory navigation views.
+- **Google Workspace API Configuration**: Allows configuration of Client ID, Secret, and Redirect URIs. If pre-configured in system environment variables, credentials forms are collapsed by default with an active configuration banner shown.
+- **Credentials Validation**: Validates client secrets, refresh tokens, and linked account profiles.
+
+### 9. Real-time Gmail Multi-folder Sync Client
+- **Google OAuth Login**: Syncs users via Google consent screen, passing encrypted user IDs through the OAuth `state` parameter to prevent CSRF hijacking.
+- **Multi-folder Sync Client**: Once authorized, the Outbox sliding drawer loads real-time Gmail messages (Inbox, Drafts, Outbox (Sent), and Spam folders).
+- **Offline Mock Warnings**: If credentials are not linked, the client displays a locked screen with descriptive prompts, falling back to local database backups with warning banners.
+- **Outbox History Drawer**: Houses search bars, keyword filters, sent-status badges, and monospace email content viewers.
+
+### 10. Telegram Bot Dispatcher
+- **Deep-link Bot Pairing**: Deep-links users directly to `@Smart_leadintel_bot` with base64 encoded user ID payloads.
+- **bot Start Webhook**: The bot webhook endpoint parses interactions, pairs chat IDs to user accounts in the database, and returns confirmation messages.
+- **MarkdownV2 Parse Formats**: Converts alert payloads to MarkdownV2 formatting, ensuring special characters are escaped and payloads are successfully dispatched.
+
+### 11. Comprehensive Lead Reports Exporter
+- **Data Formats**: Supports exporting B2B leads data in Excel, CSV, and JSON formats.
+- **Date Range Filters**: Allows report filtering by Daily, Weekly, Monthly, Yearly, and All-Time ranges.
+
+### 12. Activity Timeline Drawer
+- **Timeline Feed**: Slides out from the viewport edge to display historical activities (Leads Assigned, Status updates, Notes added, Tasks logged).
+- **Interactive Notes**: Teammates can post custom text notes directly onto a lead's activity history.
+
+### 13. Signup/Signin & User Role Lockdown
+- **Secure Authentication**: Restricts dashboard access to authenticated users.
+- **Role Lockdown**: Disables the "Admin" role option in the sign-up page, defaulting registrations to standard team "User" status.
+
+### 14. Database Cascade Integrity
+- **Lead Deletion Cascade**: Deleting a lead automatically clears associated entries in `tasks`, `task_assignments`, `task_milestones`, `task_comments`, and `lead_activities` to prevent foreign key errors.
+- **Task Deletion Cascade**: Deleting a task clears milestones, comments, and assignments.
+
+### 15. Mobile Layout & Responsive Sidebar
+- **Responsive Navigation**: Transitions the dashboard menu on mobile into a vertical, touch-accessible icon sidebar.
+- **Laptop Height Locking**: Locks the viewport wrapper to `height: 100vh; overflow: hidden;` to prevent layout clipping.
+- **internal Scrollbars & Padding**: Pushes scroll containers up by applying bottom offsets to guarantee scrollbars remain visible and interactive inside frames.
 
 ---
 

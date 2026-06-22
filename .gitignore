@@ -27,3 +27,5 @@ dist-ssr
 api_testing_documentation.pdf
 generate_pdf_fpdf.py
 credentials.json
+scratch/
+
