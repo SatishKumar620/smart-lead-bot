@@ -13,8 +13,9 @@ Welcome to the comprehensive technical documentation for the **Smart Lead Bot** 
 6. [n8n Automation Engine & Webhooks](#6-n8n-automation-engine--webhooks)
 7. [Security Considerations & Storage Parity](#7-security-considerations--storage-parity)
 8. [Deployment Architecture & Build Parity](#8-deployment-architecture--build-parity)
-9. [Limitations & Future Scope](#9-limitations--future-scope)
-10. [Conclusion & Business Value](#10-conclusion--business-value)
+9. [5-Week Project Roadmap & GSoC Plan](#9-5-week-project-roadmap--gsoc-plan)
+10. [Limitations & Future Scope](#10-limitations--future-scope)
+11. [Conclusion & Business Value](#11-conclusion--business-value)
 
 ---
 
@@ -56,6 +57,79 @@ The Smart Lead Bot architecture relies on a highly responsive, secure, and modul
 
 ### Automation & Webhooks (Integration Layer)
 - An **n8n Automation Engine** coordinates complex external workflows (like sending telemetry triggers and parsing webhook payloads), while the **Telegram Bot API** and **Google Gmail API** handle outbound notifications and email communications.
+
+### 3.1 Project Directory Structure & Core Modules
+The project layout divides the source code into database configurations, build scripts, tests, API server handlers, and the React frontend source tree:
+- **`database/`**: Contains database configuration files and initialization SQL scripts that define PostgreSQL schemas, tables (leads, users, tasks, assignments, comment logs), indexes, and cascade constraints.
+- **`scripts/`**: Houses utility automation scripts:
+  - **`preprocess_env.py`**: A python preprocessor script running at bootstrap that reads environment variables and dynamically generates `credentials.json` for n8n API configuration.
+  - **`activate_workflow.py`**: Programmatically interacts with the local n8n instance API to enable workflow items.
+  - **`update_n8n.py`**: Automated configuration sync helper.
+- **`tests/`**: Contains integration test suites simulating lead flows, calendar task allocations, multi-folder Gmail state validations, and deep-link Telegram pairings.
+- **`src/`**: Vite React client application source code:
+  - **`main.jsx`**: App compiler entry point.
+  - **`App.jsx`**: Core view switchboard managing tabs, navigation, and teammate authentication redirects.
+  - **`index.css`**: Renders structural styling, design tokens, HSL layout parameters, card glow transitions, and responsive offsets.
+  - **`components/`**: Houses modular frontend views:
+    - **`SignIn/` & `SignUp/`**: Handles authentication UI, enforcing standard teammate registers to "User" role controls (disabling Admin registration).
+    - **`Home/`**: Main greeting component and stats summary overview.
+    - **`Dashboard/`**: Renders `Dashboard.jsx` (the main B2B viewport containing geocoded maps, lead directories, custom opportunity bars, and integration menus) and `Dashboard.css`.
+    - **`Tasks/`**: Interactive task columns, milestones trackers, monthly calendar matrix, and detail drawer components.
+    - **`Common/`**: Modular shared utilities (Custom Cursor, alerts, scroll layout adapters).
+- **`server.js`**: Core backend Express application executing business logic, PostgreSQL CRUD requests, OAuth token exchanges, IMAP sync operations, and Telegram alert triggers.
+- **`vite.config.js`**: Vite configuration module embedding React compiler plugins and mirroring all backend API paths to support unified local hot-reload development.
+- **`workflow.json`**: Declarative n8n pipeline definition matching webhook triggers, Groq AI qualification, and telegram notify nodes.
+
+### 3.2 Core Libraries & Dependencies
+The following libraries are loaded as active modules:
+- **`express`** *(Backend Framework)*: Manages API routers, callback hooks, and JSON request parsers.
+- **`pg`** *(PostgreSQL Connector)*: Handles client connections, transactions, and deletion cascade sequences.
+- **`dotenv`** *(Environment Variables)*: Configures local credentials and ports.
+- **`react` & `react-dom`** *(UI Library)*: Renders views and handles reactivity states.
+- **`react-router-dom`** *(SPA Routing)*: Resolves browser navigation paths.
+- **`leaflet`** *(Interactive Map)*: Initializes leaf mapping container, tracks zoom boundaries, and renders lead temperature markers.
+- **`chart.js` & `react-chartjs-2`** *(Data Visuals)*: Draws opportunity status gauges and B2B gap analysis bars.
+- **`gsap`** *(GreenSock Animations)*: Powers sidebar transitions and card hover animations.
+- **`xlsx`** *(Sheet Data Utility)*: Compiles Excel/CSV lead reports and parses uploads.
+
+### 3.3 REST API Endpoints Reference
+The Express backend registers these route endpoints to manage features:
+- **Authentication**:
+  - `POST /api/auth/signup`: Registers a teammate (enforcing "User" role).
+  - `POST /api/auth/signin`: Validates credentials and returns session state.
+- **Leads Directory**:
+  - `GET /api/leads`: Retrieves leads matching search filters (niche, city, text query).
+  - `POST /api/leads`: Submits single manual lead or processes CSV/Excel files.
+  - `PUT /api/leads`: Modifies core details and custom field attributes.
+  - `DELETE /api/leads`: Deletes lead (cascading to clear associated tasks and activities).
+  - `GET /api/leads/export`: Downloads filtered leads dataset in Excel, CSV, or JSON report format.
+  - `POST /api/find-leads`: Runs geocoding and Wikipedia B2B crawler integrations (falling back to rules-based generators).
+  - `GET /api/leads/activities/:leadId`: Fetches history timeline notes for a lead.
+  - `POST /api/leads/activity`: Appends note to history timeline.
+- **Tasks & Calendar**:
+  - `GET /api/tasks`: Fetches all tasks, milestone progress counts, and assignees.
+  - `POST /api/tasks`: Creates a task with assignee, milestones, and schedule dates.
+  - `PUT /api/tasks/:taskId`: Updates status, dates, or milestone checkbox arrays.
+  - `DELETE /api/tasks/:taskId`: Deletes a task, cascade-clearing assignments.
+  - `PUT /api/tasks/:taskId/milestones/:milestoneId`: Sets milestone checkbox state.
+  - `POST /api/tasks/:taskId/comments`: Adds comment logs to a task feed.
+- **Integrations & Integrator Hooks**:
+  - `GET /api/google/status`: Checks Google Workspace credentials presence.
+  - `POST /api/google/save-credentials`: Stores Workspace Client ID and Secrets.
+  - `POST /api/google/disconnect`: Disconnects Google configurations.
+  - `GET /api/google/auth-url`: Fetches redirect login url.
+  - `GET /api/auth/google/callback`: Extracts code, validates state parameters, stores tokens.
+  - `POST /api/google-forms/create`: Creates public Google Forms.
+  - `POST /api/google-forms/sync`: Ingests leads from Google Sheets.
+  - `GET /api/email/status`: Returns IMAP sync connection state.
+  - `POST /api/email/connect`: Pairs Gmail credentials.
+  - `POST /api/email/disconnect`: Clears Gmail sync configuration.
+  - `GET /api/email/messages`: Reads mailbox (Inbox, Drafts, Outbox, Spam).
+  - `PUT /api/email/read`: Toggles read state on synced emails.
+  - `GET /api/telegram/status`: Returns Telegram link pairing state.
+  - `POST /api/telegram/link-manual`: Bypasses pairing by inputting Chat ID.
+  - `POST /api/telegram/disconnect`: Clears Telegram pairing configuration.
+  - `POST /api/telegram/webhook`: Webhook endpoint pairing `/start <userId>` deep-links.
 
 ---
 
@@ -201,9 +275,54 @@ Two remote git repositories are configured on the development workspace:
 ### Vite Development Server Parity
 To allow local developers to test features without running a separate production server process, the Vite configuration file (`vite.config.js`) integrates custom API middleware handlers. All database migration scripts, lead update operations, OAuth callbacks, and tasks endpoints are kept in full parity between `vite.config.js` and `server.js`.
 
+## 9. 5-Week Project Roadmap & GSoC Plan
+
+This roadmap structures the delivery of the B2B AI Lead Generation Bot project into a 5-week implementation timeline, resembling the milestones of Google Summer of Code (GSoC):
+
+### Week 1: Core Architecture, Database Schema, and Ingestion Engine
+- **Focus**: Setting up the environment, database schemas, and baseline ingestion.
+- **Deliverables**:
+  - Provision PostgreSQL tables (leads, tasks, users, milestones, comments, logs) with cascade constraints and indexing.
+  - Set up Docker container structure and preprocess config runners.
+  - Build the Ingestion Engine supporting manual intakes and Excel/CSV/JSON bulk file parsing.
+  - Incorporate null-value protection to prevent spreadsheet blanks from populating with default values.
+  - Implement Custom Fields Schema Creator allowing runtime database extensions (text, date, number fields).
+
+### Week 2: Crawler Integrations, Opportunity Meters, and Mapping Viewport
+- **Focus**: Populating leads via crawlers and constructing core analytics dashboards.
+- **Deliverables**:
+  - Implement B2B Crawler fetching Wikidata and OpenStreetMap entities based on niche/city queries.
+  - Develop rules-based mock crawler seed generators that activate when rate-limits or sandboxed environment restrictions occur.
+  - Implement real-time Opportunity Meter calculations evaluating website, social, and local marketing gaps.
+  - Build stable geocoded map viewport component using memoized markers to prevent unwanted scroll/zoom shifts on data updates.
+
+### Week 3: Interactive Kanban & Monthly Calendar Task Delegation
+- **Focus**: Development of the Task Management System and scheduling.
+- **Deliverables**:
+  - Build a 3-column Kanban Task Board with milestones progress trackers and overdue indicators.
+  - Implement 7-column monthly Calendar View, mapping tasks by Assign Date, Scheduled Start Date, Due Date, or Completion Date.
+  - Build Date Detail drawer displaying metadata logs for all tasks assigned/scheduled on clicked days.
+  - Wire cascade deletes on tasks to clear comments, milestones, and assignments.
+
+### Week 4: Google Workspace OAuth, IMAP Gmail Client Sync, and Outbox Feeds
+- **Focus**: Setting up external integrations and communication client.
+- **Deliverables**:
+  - Relocate all integration panels to the Profile Settings tab.
+  - Implement secure Google Workspace OAuth consent redirect flows utilizing encrypted `state` parameters to prevent CSRF.
+  - Build multi-folder real-time Gmail sync client (Inbox, Drafts, Outbox, Spam) displaying monospace message contents.
+  - Deploy safe fallbacks showing locked warning banners when Gmail credentials are unlinked.
+
+### Week 5: Telegram Bot Webhooks, Groq AI Enrichment, and Deployment
+- **Focus**: AI workflow integrations, Telegram webhooks, and deployment.
+- **Deliverables**:
+  - Configure n8n Automation Engine workflows.
+  - Connect Groq Llama LLM qualification nodes for automated lead scoring.
+  - Configure Telegram Bot webhook endpoints supporting base64 user pairing deep-links (`/start <userId>`) and MarkdownV2 dispatch alerts.
+  - Deploy dual-target deployment pipelines for GitHub origin and Hugging Face sandboxed environments.
+
 ---
 
-## 9. Limitations & Future Scope
+## 10. Limitations & Future Scope
 
 While the current release (v2.1.0) provides a highly resilient and automated pipeline, certain limitations present opportunities for future enhancements:
 
@@ -218,8 +337,9 @@ While the current release (v2.1.0) provides a highly resilient and automated pip
 
 ---
 
-## 10. Conclusion & Business Value
+## 11. Conclusion & Business Value
 
 The **Smart Lead Bot** project bridges the gap between raw data collection and strategic sales management. By integrating a dynamic, adaptable database schema, a visual Opportunity Meter, a dual-mode Task Board (Kanban and Calendar), and automated outreach channels (Gmail & Telegram settings), the platform empowers teams to focus on relationship-building rather than repetitive manual work.
 
 The system's deployment-ready, Dockerized design ensures it can be hosted in minutes on environments like GitHub and Hugging Face, delivering a premium, secure, and resilient tool for modern B2B organizations.
+
