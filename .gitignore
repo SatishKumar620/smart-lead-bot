@@ -23,9 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# Temporary PDF documentation
-api_testing_documentation.pdf
-generate_pdf_fpdf.py
 credentials.json
 scratch/
 
