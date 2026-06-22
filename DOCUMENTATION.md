@@ -230,6 +230,25 @@ The **n8n Automation Engine** manages background jobs and webhook notifications,
 
 ![System Integration](./public/images/system_integration.png)
 
+### 6.1 Core n8n Workflow Nodes
+The n8n automation graph declared in `workflow.json` coordinates B2B ingestion, qualification, and alert broadcasts using the following core nodes:
+
+1. **`n8n-nodes-base.webhook` (Webhook Ingestion Trigger)**: 
+   - *Purpose*: Listens for incoming POST payloads (like Google Form submissions or CRM updates) to ingest leads into the pipeline.
+2. **`n8n-nodes-base.respondToWebhook` (Webhook Responder)**:
+   - *Purpose*: Sends an immediate structured HTTP 200 response back to the trigger origin, ensuring webhook requests do not hang.
+3. **`n8n-nodes-base.postgres` (Database Handler)**:
+   - *Purpose*: Runs custom SQL queries to read user records, update lead rows with LLM qualification scores, and insert activity timeline history notes.
+4. **`n8n-nodes-base.httpRequest` (LLM & API Connector)**:
+   - *Purpose*: Performs outbound REST queries. Dispatches raw lead niches and details to the Groq/Llama LLM API, Wikipedia geocoders, and Telegram server endpoints.
+5. **`n8n-nodes-base.code` (JavaScript Data Preprocessor)**:
+   - *Purpose*: Sanitizes payloads, parses JSON variables, structures email templates, and formats Slack/Telegram text fields (e.g. escaping special characters for Telegram MarkdownV2).
+6. **`n8n-nodes-base.if` (Conditional Router)**:
+   - *Purpose*: Branches execution pathways based on specific logic, such as whether a lead is qualified, if a user has linked their Telegram profile, or if API calls returned valid data.
+7. **`n8n-nodes-base.telegram` (Notification Dispatcher)**:
+   - *Purpose*: Dispatches real-time message payloads directly to a sales teammate's private Telegram chat using the bot API.
+8. **`n8n-nodes-base.scheduleTrigger` (Cron Poller)**:
+   - *Purpose*: Triggers cron-based schedules to run routine database cleanup, poll Google Sheets sync logs, or sweep outreach queues.
 
 ### Webhook Routing
 The project defines webhook trigger nodes that receive B2B lead updates, Google Form submissions, and Telegram pairing requests. These webhooks parse JSON payloads, route them to Postgres nodes, and return structured JSON responses.
