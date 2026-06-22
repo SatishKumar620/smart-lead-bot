@@ -27,3 +27,8 @@ Add these keys in your Hugging Face Space Settings under **Variables and Secrets
 - `COHERE_API_KEY`: Cohere API Key (for vector embeddings).
 - `TELEGRAM_BOT_TOKEN`: Telegram bot token (for alerts).
 - `TELEGRAM_CHAT_ID`: Telegram chat ID (for alerts).
+
+---
+
+## 📖 System Documentation
+For detailed architectural blueprints, core features, n8n webhook definitions, database structures, security fallbacks, and deployment guidelines, see [DOCUMENTATION.md](DOCUMENTATION.md).

@@ -13,32 +13,44 @@ def replace_placeholder(obj, placeholder, real_val):
 def main():
     print("=== Preprocessing n8n files with environment variables ===")
     
-    # 1. Preprocess credentials.json
+    # 1. Preprocess credentials.json (generate dynamically from environment variables to avoid storing secrets in git)
     credentials_path = "/app/credentials.json"
-    if os.path.exists(credentials_path):
-        try:
-            with open(credentials_path, "r", encoding="utf-8") as f:
-                creds = json.load(f)
-            
-            modified = False
-            for cred in creds:
-                if cred.get("type") == "telegramApi":
-                    telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("TELEGRAM_API_TOKEN")
-                    if telegram_token:
-                        print("Updating Telegram bot token from environment variable.")
-                        cred["data"]["accessToken"] = telegram_token
-                        modified = True
-            
-            if modified:
-                with open(credentials_path, "w", encoding="utf-8") as f:
-                    json.dump(creds, f, indent=2)
-                print("Successfully updated credentials.json")
-            else:
-                print("No Telegram Bot Token environment variable found to update credentials.json")
-        except Exception as e:
-            print(f"Error preprocessing credentials.json: {e}")
-    else:
-        print("credentials.json not found")
+    try:
+        telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("TELEGRAM_API_TOKEN") or "YOUR_TELEGRAM_BOT_TOKEN_HERE"
+        postgres_host = os.environ.get("POSTGRES_HOST") or "127.0.0.1"
+        postgres_db = os.environ.get("POSTGRES_DB") or "leads"
+        postgres_user = os.environ.get("POSTGRES_USER") or "admin"
+        postgres_password = os.environ.get("POSTGRES_PASSWORD") or "password123"
+
+        creds = [
+          {
+            "id": "kcKekU9WnQVUH62d",
+            "name": "Postgres account",
+            "type": "postgres",
+            "data": {
+              "host": postgres_host,
+              "port": 5432,
+              "database": postgres_db,
+              "user": postgres_user,
+              "password": postgres_password,
+              "ssl": "disable"
+            }
+          },
+          {
+            "id": "wimA6PU0TqWTqbkV",
+            "name": "Telegram account",
+            "type": "telegramApi",
+            "data": {
+              "accessToken": telegram_token
+            }
+          }
+        ]
+
+        with open(credentials_path, "w", encoding="utf-8") as f:
+            json.dump(creds, f, indent=2)
+        print("Successfully generated credentials.json dynamically from env variables.")
+    except Exception as e:
+        print(f"Error generating credentials.json: {e}")
 
     # 2. Preprocess workflow.json on-disk (schema cleaning + node upgrades)
     workflow_path = "/app/workflow.json"

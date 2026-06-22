@@ -40,9 +40,9 @@ echo "Initializing leads database schema..."
 psql -h localhost -p 5432 -d postgres -c "CREATE ROLE admin WITH SUPERUSER LOGIN PASSWORD 'password123';" || echo "admin role already exists."
 createdb -h localhost -p 5432 -O admin leads || echo "leads database already exists."
 psql -h localhost -p 5432 -d postgres -c "ALTER DATABASE leads OWNER TO admin;" || echo "Failed to alter database owner."
-psql -h localhost -p 5432 -U admin -d leads -f /app/schema.sql
-psql -h localhost -p 5432 -U admin -d leads -f /app/seed_leads.sql && echo "✅ Pune leads seeded!"
-psql -h localhost -p 5432 -U admin -d leads -f /app/seed_users.sql && echo "✅ Users seeded!"
+psql -h localhost -p 5432 -U admin -d leads -f /app/database/schema.sql
+psql -h localhost -p 5432 -U admin -d leads -f /app/database/seed_leads.sql && echo "✅ Pune leads seeded!"
+psql -h localhost -p 5432 -U admin -d leads -f /app/database/seed_users.sql && echo "✅ Users seeded!"
 
 # Configure n8n environment
 export N8N_INSTANCE_OWNER_MANAGED_BY_ENV=true
@@ -79,7 +79,7 @@ fi
 
 # Run environment preprocessor to inject secrets before importing
 echo "Preprocessing workflow and credentials..."
-python3 /app/preprocess_env.py
+python3 /app/scripts/preprocess_env.py
 
 # Import workflow and credentials using CLI
 echo "Importing n8n credentials and workflow..." > "$HOME/import.log"
@@ -93,11 +93,11 @@ sleep 3
 # Activate the workflow via REST API using the admin owner JWT
 # We use the n8n public API to find the workflow by name and activate it
 echo "Activating workflow via n8n REST API..."
-python3 /app/activate_workflow.py >> "$HOME/import.log" 2>&1 && echo "✅ Workflow activated." || echo "⚠️  Workflow activation failed — see $HOME/import.log"
+python3 /app/scripts/activate_workflow.py >> "$HOME/import.log" 2>&1 && echo "✅ Workflow activated." || echo "⚠️  Workflow activation failed — see $HOME/import.log"
 
 # Update workflow nodes with real secrets from HF environment
 echo "Injecting runtime secrets into workflow nodes..."
-python3 /app/update_n8n.py >> "$HOME/import.log" 2>&1 && echo "✅ Secrets injected." || echo "⚠️  Secret injection failed — see $HOME/import.log"
+python3 /app/scripts/update_n8n.py >> "$HOME/import.log" 2>&1 && echo "✅ Secrets injected." || echo "⚠️  Secret injection failed — see $HOME/import.log"
 
 # Start production Express server
 echo "Launching Production Express server on Port 7860..."
